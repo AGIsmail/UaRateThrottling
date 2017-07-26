@@ -117,8 +117,8 @@ static void init_UA_Server(void *retval, zkUA_Config *zkUAConfigs) {
             UA_PRINTF_GUID_DATA(zkUAConfigs->guid));
     /* Check that the Queue path exists for the redundancy set on zk */
     char *zkQueuePath = (char *) calloc(65535, sizeof(char));
-    snprintf(zkQueuePath, 65535, "/Servers/%s/Queue/%s", groupGuid);
-    fprintf(stderr, "Pushing to zk: %s\n", zkQueuePath);
+    snprintf(zkQueuePath, 65535, "/Servers/%s/Queue", groupGuid);
+    fprintf(stderr, "Checking if queue path exists on zk: %s\n", zkQueuePath);
     struct String_vector strings;
     int rc = zoo_get_children(zh, zkQueuePath, 0, &strings);
     if (rc == ZOK) {
@@ -136,12 +136,12 @@ static void init_UA_Server(void *retval, zkUA_Config *zkUAConfigs) {
             zkUAConfigs->uaPort); /* using config file hostname & port */
     char *encodedServerUri = zkUA_url_encode(serverUri);
     char *serverTaskPath = calloc(65535, sizeof(char));
-    snprintf(serverTaskPath, 65535, "%s/%s", zkQueuePath, serverUri);
+    snprintf(serverTaskPath, 65535, "%s/%s", zkQueuePath, encodedServerUri);
     char *path_buffer = calloc(65535, sizeof(char));
     int path_buffer_len = 65535;
     rc = zoo_create(zh, serverTaskPath, " ", 3, &ZOO_OPEN_ACL_UNSAFE,
              flags, path_buffer, path_buffer_len);
-     if (rc) {
+     if (rc!=ZOK || rc!=ZNODEEXISTS) {
          fprintf(stderr, "Error %d for %s\n", rc, serverTaskPath);
          intHandler(SIGINT);
      }
