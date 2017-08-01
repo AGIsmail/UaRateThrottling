@@ -4,7 +4,10 @@ Dependencies:
 ```sh
 apt-get install -y dh-autoreconf wget make git openjdk-8-jdk libcppunit-dev libcppunit-doc libtool patch libzookeeper-mt-dev libjansson-dev
 ```
-Using open62541 version - commit: 3702ffe7f3c720fd9e82a5177265a0fa960fb457
+
+### Don't upgrade open62541
+Using open62541 version - commit: 03e272a01b137f9f0370bd378d4c1bdfac05a798
+(Newer commit causes an issue with UA Binary encoding and decoding)
 
 Compile:
 ```sh

@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/src_generated/ua_config.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/build/src_generated/ua_config.h" ***********************************/
 
 /* This Source Code Form is subject to the terms of the Mozilla Public
 *  License, v. 2.0. If a copy of the MPL was not distributed with this 
@@ -39,13 +39,14 @@ extern "C" {
 #define UA_OPEN62541_VER_MAJOR 0
 #define UA_OPEN62541_VER_MINOR 2
 #define UA_OPEN62541_VER_PATCH 0
-#define UA_OPEN62541_VER_LABEL "" /* Release candidate label, etc. */
+#define UA_OPEN62541_VER_LABEL "-rc2" /* Release candidate label, etc. */
 #define UA_OPEN62541_VER_COMMIT "undefined"
 
 /**
  * Options
  * ------- */
 #define UA_LOGLEVEL 300
+//#define UA_LOGLEVEL 100
 #define UA_ENABLE_METHODCALLS
 #define UA_ENABLE_NODEMANAGEMENT
 #define UA_ENABLE_SUBSCRIPTIONS
@@ -59,6 +60,7 @@ extern "C" {
 /* #undef UA_ENABLE_EMBEDDED_LIBC */
 /* #undef UA_ENABLE_DETERMINISTIC_RNG */
 /* #undef UA_ENABLE_GENERATE_NAMESPACE0 */
+/* #undef UA_ENABLE_EXTERNAL_NAMESPACES */
 /* #undef UA_ENABLE_NONSTANDARD_STATELESS */
 /* #undef UA_ENABLE_NONSTANDARD_UDP */
 
@@ -74,12 +76,6 @@ extern "C" {
 
 #include <stddef.h>
 
-/* Include stdint.h or workaround for older Visual Studios */
-#if !defined(_MSC_VER) || _MSC_VER >= 1600
-# include <stdint.h>
-#else
-#endif
-
 #ifndef __cplusplus
 # include <stdbool.h> /* C99 Boolean */
 /* Manual Boolean:
@@ -88,15 +84,22 @@ typedef uint8_t bool;
 #define false 0 */
 #endif
 
-#include <stdlib.h>
+/* Manually define some function on libc */
+#ifndef UA_ENABLE_EMBEDDED_LIBC
+# include <string.h>
+#else
+  void *memcpy(void *UA_RESTRICT dest, const void *UA_RESTRICT src, size_t n);
+  void *memset(void *dest, int c, size_t n);
+  size_t strlen(const char *s);
+  int memcmp(const void *vl, const void *vr, size_t n);
+#endif
 
-/**
- * Memory Management
- * ---------------
- * The default malloc implementation from ``stdlib.h`` is used internally.
- * Override if required. */
-#if defined(_WIN32) && !defined(__clang__)
-# include <malloc.h>
+/* Memory Management */
+#include <stdlib.h>
+#ifdef _WIN32
+# ifndef __clang__
+#  include <malloc.h>
+# endif
 #endif
 
 #define UA_free(ptr) free(ptr)
@@ -104,13 +107,15 @@ typedef uint8_t bool;
 #define UA_calloc(num, size) calloc(num, size)
 #define UA_realloc(ptr, size) realloc(ptr, size)
 
-#if defined(__GNUC__) || defined(__clang__)
-# define UA_alloca(size) __builtin_alloca (size)
-#elif defined(_WIN32)
-# define UA_alloca(SIZE) _alloca(SIZE)
-#else
-# include <alloca.h>
-# define UA_alloca(SIZE) alloca(SIZE)
+#ifndef NO_ALLOCA
+# if defined(__GNUC__) || defined(__clang__)
+#  define UA_alloca(size) __builtin_alloca (size)
+# elif defined(_WIN32)
+#  define UA_alloca(SIZE) _alloca(SIZE)
+# else
+#  include <alloca.h>
+#  define UA_alloca(SIZE) alloca(SIZE)
+# endif
 #endif
 
 /**
@@ -179,32 +184,15 @@ typedef uint8_t bool;
 #endif
 
 /**
- * String Manipulation
- * -------------------
- * The header ``string.h`` is defined in the C-standard. If no libc is provided
- * (e.g. on some embedded target), use the following definitions and the
- * implementation in ``/deps/libc_string.c`` */
-#ifndef UA_ENABLE_EMBEDDED_LIBC
-# include <string.h>
-#else
-  void *memcpy(void *UA_RESTRICT dest, const void *UA_RESTRICT src, size_t n);
-  void *memset(void *dest, int c, size_t n);
-  size_t strlen(const char *s);
-  int memcmp(const void *vl, const void *vr, size_t n);
-#endif
-
-/**
  * Binary Encoding Overlays
  * ------------------------
- * Integers and floating point numbers are transmitted in little-endian (IEEE 754
+ * Integers and floating point numbers are transmitted in little-endian (IEE 754
  * for floating point) encoding. If the target architecture uses the same
  * format, numeral datatypes can be memcpy'd (overlayed) on the binary stream.
  * This speeds up encoding.
  *
  * Integer Endianness
- * ^^^^^^^^^^^^^^^^^^
- * The definition ``UA_BINARY_OVERLAYABLE_INTEGER`` is true when the integer
- * representation of the target architecture is little-endian. */
+ * ^^^^^^^^^^^^^^^^^^ */
 #if defined(_WIN32) || (defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
                         (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__))
 # define UA_BINARY_OVERLAYABLE_INTEGER true
@@ -249,11 +237,7 @@ typedef uint8_t bool;
 
 /**
  * Float Endianness
- * ^^^^^^^^^^^^^^^^
- * The definition ``UA_BINARY_OVERLAYABLE_FLOAT`` is true when the floating
- * point number representation of the target architecture is IEEE 754. Note that
- * this cannot be reliable detected with macros for the clang compiler
- * (beginning of 2017). Just override if necessary. */
+ * ^^^^^^^^^^^^^^^^ */
 #if defined(_WIN32)
 # define UA_BINARY_OVERLAYABLE_FLOAT true
 #elif defined(__FLOAT_WORD_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && \
@@ -273,7 +257,7 @@ typedef uint8_t bool;
 #endif
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/deps/ms_stdint.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/deps/ms_stdint.h" ***********************************/
 
 // ISO C9x  compliant stdint.h for Microsoft Visual Studio
 // Based on ISO/IEC 9899:TC2 Committee draft (May 6, 2005) WG14/N1124 
@@ -528,7 +512,7 @@ typedef uint64_t  uintmax_t;
 
 #endif // !defined(_MSC_VER) || _MSC_VER >= 1600 ]
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/include/ua_constants.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/include/ua_constants.h" ***********************************/
 
 /* This Source Code Form is subject to the terms of the Mozilla Public
 *  License, v. 2.0. If a copy of the MPL was not distributed with this 
@@ -859,7 +843,7 @@ typedef enum {
 #endif
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/include/ua_types.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/include/ua_types.h" ***********************************/
 
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -1305,27 +1289,6 @@ UA_LOCALIZEDTEXT_ALLOC(const char *locale, const char *text) {
 }
 
 /**
- * .. _numericrange:
- *
- * NumericRange
- * ^^^^^^^^^^^^
- *
- * NumericRanges are used to indicate subsets of a (multidimensional) array.
- * They no official data type in the OPC UA standard and are transmitted only
- * with a string encoding, such as "1:2,0:3,5". The colon separates min/max
- * index and the comma separates dimensions. A single value indicates a range
- * with a single element (min==max). */
-typedef struct {
-    UA_UInt32 min;
-    UA_UInt32 max;
-} UA_NumericRangeDimension;
-
-typedef struct  {
-    size_t dimensionsSize;
-    UA_NumericRangeDimension *dimensions;
-} UA_NumericRange;
-
-/**
  * .. _variant:
  *
  * Variant
@@ -1362,6 +1325,10 @@ typedef struct  {
 /* Forward declaration. See the section on Generic Type Handling */
 struct UA_DataType;
 typedef struct UA_DataType UA_DataType;
+
+/* Forward declaration. See the section on Array Handling */
+struct UA_NumericRange;
+typedef struct UA_NumericRange UA_NumericRange;
 
 #define UA_EMPTY_ARRAY_SENTINEL ((void*)0x01)
 
@@ -1735,6 +1702,27 @@ UA_Array_copy(const void *src, size_t size, void **dst,
 void UA_EXPORT UA_Array_delete(void *p, size_t size, const UA_DataType *type);
 
 /**
+ * .. _numericrange:
+ *
+ * NumericRange
+ * ^^^^^^^^^^^^
+ *
+ * NumericRanges are used to indicate subsets of a (multidimensional) variant
+ * array. NumericRange has no official type structure in the standard. On the
+ * wire, it only exists as an encoded string, such as "1:2,0:3,5". The colon
+ * separates min/max index and the comma separates dimensions. A single value
+ * indicates a range with a single element (min==max). */
+typedef struct {
+    UA_UInt32 min;
+    UA_UInt32 max;
+} UA_NumericRangeDimension;
+
+struct UA_NumericRange {
+    size_t dimensionsSize;
+    UA_NumericRangeDimension *dimensions;
+};
+
+/**
  * Random Number Generator
  * -----------------------
  * If UA_ENABLE_MULTITHREADING is defined, then the seed is stored in thread
@@ -1760,13 +1748,13 @@ UA_Guid UA_EXPORT UA_Guid_random(void);     /* no cryptographic entropy */
 #endif
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/src_generated/ua_nodeids.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/build/src_generated/ua_nodeids.h" ***********************************/
 
 /**********************************************************
- * /home/slint/Documents/Code/Developing_OPCUA/open62541/src_generated/ua_nodeids.hgen -- do not modify
+ * /home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/build/src_generated/ua_nodeids.hgen -- do not modify
  **********************************************************
- * Generated from /home/slint/Documents/Code/Developing_OPCUA/open62541/tools/schema/NodeIds.csv with script /home/slint/Documents/Code/Developing_OPCUA/open62541/tools/generate_nodeids.py
- * on host dell-pc by user slint at 2017-04-13 12:04:25
+ * Generated from /home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/tools/schema/NodeIds.csv with script /home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/tools/generate_nodeids.py
+ * on host dell-pc by user slint at 2017-03-09 09:09:58
  **********************************************************/
  
 
@@ -3043,10 +3031,10 @@ UA_Guid UA_EXPORT UA_Guid_random(void);     /* no cryptographic entropy */
 #define UA_NS0ID_HASMODELPARENT 50 // ReferenceType
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/src_generated/ua_types_generated.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/build/src_generated/ua_types_generated.h" ***********************************/
 
-/* Generated from Opc.Ua.Types.bsd with script /home/slint/Documents/Code/Developing_OPCUA/open62541/tools/generate_datatypes.py
- * on host dell-pc by user slint at 2017-07-12 10:59:01 */
+/* Generated from Opc.Ua.Types.bsd with script /home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/tools/generate_datatypes.py
+ * on host dell-pc by user slint at 2017-03-09 09:09:58 */
 
 
 #ifdef __cplusplus
@@ -5133,10 +5121,10 @@ typedef struct {
 #endif
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/src_generated/ua_types_generated_handling.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/build/src_generated/ua_types_generated_handling.h" ***********************************/
 
-/* Generated from Opc.Ua.Types.bsd with script /home/slint/Documents/Code/Developing_OPCUA/open62541/tools/generate_datatypes.py
- * on host dell-pc by user slint at 2017-07-12 10:59:01 */
+/* Generated from Opc.Ua.Types.bsd with script /home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/tools/generate_datatypes.py
+ * on host dell-pc by user slint at 2017-03-09 09:09:58 */
 
 
 #ifdef __cplusplus
@@ -9366,7 +9354,7 @@ UA_QueryFirstRequest_delete(UA_QueryFirstRequest *p) {
 #endif
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/include/ua_connection.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/include/ua_connection.h" ***********************************/
 
 /* This Source Code Form is subject to the terms of the Mozilla Public
 *  License, v. 2.0. If a copy of the MPL was not distributed with this 
@@ -9502,7 +9490,7 @@ UA_readNumber(UA_Byte *buf, size_t buflen, UA_UInt32 *number);
 #endif
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/include/ua_job.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/include/ua_job.h" ***********************************/
 
 /* This Source Code Form is subject to the terms of the Mozilla Public
 *  License, v. 2.0. If a copy of the MPL was not distributed with this 
@@ -9548,7 +9536,7 @@ typedef struct {
 #endif
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/include/ua_log.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/include/ua_log.h" ***********************************/
 
 /* This Source Code Form is subject to the terms of the Mozilla Public
 *  License, v. 2.0. If a copy of the MPL was not distributed with this 
@@ -9670,7 +9658,7 @@ UA_LOG_FATAL(UA_Logger logger, UA_LogCategory category, const char *msg, ...) {
 /**
  * Convenience macros for complex types
  * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
-#define UA_PRINTF_GUID_FORMAT "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x"
+#define UA_PRINTF_GUID_FORMAT "{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}"
 #define UA_PRINTF_GUID_DATA(GUID) (GUID).data1, (GUID).data2, (GUID).data3, \
         (GUID).data4[0], (GUID).data4[1], (GUID).data4[2], (GUID).data4[3], \
         (GUID).data4[4], (GUID).data4[5], (GUID).data4[6], (GUID).data4[7]
@@ -9683,7 +9671,7 @@ UA_LOG_FATAL(UA_Logger logger, UA_LogCategory category, const char *msg, ...) {
 #endif
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/include/ua_server.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/include/ua_server.h" ***********************************/
 
 /* This Source Code Form is subject to the terms of the Mozilla Public
 *  License, v. 2.0. If a copy of the MPL was not distributed with this 
@@ -10564,7 +10552,103 @@ UA_Server_deleteReference(UA_Server *server, const UA_NodeId sourceNodeId,
 #endif
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/include/ua_client.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/include/ua_server_external_ns.h" ***********************************/
+
+/* This Source Code Form is subject to the terms of the Mozilla Public
+*  License, v. 2.0. If a copy of the MPL was not distributed with this 
+*  file, You can obtain one at http://mozilla.org/MPL/2.0/.*/
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * An external application that manages its own data and data model. To plug in
+ * outside data sources, one can use
+ *
+ * - VariableNodes with a data source (functions that are called for read and write access)
+ * - An external nodestore that is mapped to specific namespaces
+ *
+ * If no external nodestore is defined for a nodeid, it is always looked up in
+ * the "local" nodestore of open62541. Namespace Zero is always in the local
+ * nodestore.
+ */
+
+typedef UA_Int32 (*UA_ExternalNodeStore_addNodes)
+(void *ensHandle, const UA_RequestHeader *requestHeader, UA_AddNodesItem *nodesToAdd, UA_UInt32 *indices,
+ UA_UInt32 indicesSize, UA_AddNodesResult* addNodesResults, UA_DiagnosticInfo *diagnosticInfos);
+
+typedef UA_Int32 (*UA_ExternalNodeStore_addReferences)
+(void *ensHandle, const UA_RequestHeader *requestHeader, UA_AddReferencesItem* referencesToAdd,
+ UA_UInt32 *indices,UA_UInt32 indicesSize, UA_StatusCode *addReferencesResults,
+ UA_DiagnosticInfo *diagnosticInfos);
+ 
+typedef UA_StatusCode (*UA_ExternalNodeStore_addOneWayReference)
+(void *ensHandle, const UA_AddReferencesItem *item);
+
+typedef UA_StatusCode (*UA_ExternalNodeStore_getOneWayReferences)
+(void *ensHandle, UA_NodeId *nodeId, UA_UInt32 *referencesSize, UA_ReferenceNode **references);
+
+typedef UA_StatusCode (*UA_ExternalNodeStore_deleteNodes)
+(void *ensHandle, const UA_RequestHeader *requestHeader, UA_DeleteNodesItem *nodesToDelete, UA_UInt32 *indices,
+ UA_UInt32 indicesSize, UA_StatusCode *deleteNodesResults, UA_DiagnosticInfo *diagnosticInfos);
+
+typedef UA_Int32 (*UA_ExternalNodeStore_deleteReferences)
+(void *ensHandle, const UA_RequestHeader *requestHeader, UA_DeleteReferencesItem *referenceToDelete,
+ UA_UInt32 *indices, UA_UInt32 indicesSize, UA_StatusCode deleteReferencesresults,
+ UA_DiagnosticInfo *diagnosticInfos);
+
+typedef UA_Int32 (*UA_ExternalNodeStore_readNodes)
+(void *ensHandle, const UA_RequestHeader *requestHeader, UA_ReadValueId *readValueIds, UA_UInt32 *indices,
+ UA_UInt32 indicesSize,UA_DataValue *readNodesResults, UA_Boolean timeStampToReturn,
+ UA_DiagnosticInfo *diagnosticInfos);
+
+typedef UA_Int32 (*UA_ExternalNodeStore_writeNodes)
+(void *ensHandle, const UA_RequestHeader *requestHeader, UA_WriteValue *writeValues, UA_UInt32 *indices,
+ UA_UInt32 indicesSize, UA_StatusCode *writeNodesResults, UA_DiagnosticInfo *diagnosticInfo);
+
+typedef UA_Int32 (*UA_ExternalNodeStore_browseNodes)
+(void *ensHandle, const UA_RequestHeader *requestHeader, UA_BrowseDescription *browseDescriptions,
+ UA_UInt32 *indices, UA_UInt32 indicesSize, UA_UInt32 requestedMaxReferencesPerNode,
+ UA_BrowseResult *browseResults, UA_DiagnosticInfo *diagnosticInfos);
+
+typedef UA_Int32 (*UA_ExternalNodeStore_translateBrowsePathsToNodeIds)
+(void *ensHandle, const UA_RequestHeader *requestHeader, UA_BrowsePath *browsePath, UA_UInt32 *indices,
+ UA_UInt32 indicesSize, UA_BrowsePathResult *browsePathResults, UA_DiagnosticInfo *diagnosticInfos);
+
+typedef UA_Int32 (*UA_ExternalNodeStore_call)
+(void *ensHandle, const UA_RequestHeader *requestHeader, UA_CallMethodRequest *request, UA_UInt32 *indices,
+ UA_UInt32 indicesSize,UA_CallMethodResult *results);
+ 
+typedef UA_Int32 (*UA_ExternalNodeStore_delete)(void *ensHandle);
+
+typedef struct UA_ExternalNodeStore {
+    void *ensHandle;
+    UA_ExternalNodeStore_addNodes addNodes;
+    UA_ExternalNodeStore_deleteNodes deleteNodes;
+    UA_ExternalNodeStore_writeNodes writeNodes;
+    UA_ExternalNodeStore_readNodes readNodes;
+    UA_ExternalNodeStore_browseNodes browseNodes;
+    UA_ExternalNodeStore_translateBrowsePathsToNodeIds translateBrowsePathsToNodeIds;
+    UA_ExternalNodeStore_addReferences addReferences;
+    UA_ExternalNodeStore_deleteReferences deleteReferences;
+    UA_ExternalNodeStore_call call;
+    UA_ExternalNodeStore_addOneWayReference addOneWayReference;
+    UA_ExternalNodeStore_getOneWayReferences getOneWayReferences;
+    UA_ExternalNodeStore_delete destroy;
+} UA_ExternalNodeStore;
+
+UA_StatusCode UA_EXPORT
+UA_Server_addExternalNamespace(UA_Server *server, const UA_String *url,
+                               UA_ExternalNodeStore *nodeStore, UA_UInt16 *assignedNamespaceIndex);
+
+#ifdef __cplusplus
+}
+#endif
+
+
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/include/ua_client.h" ***********************************/
 
 /* This Source Code Form is subject to the terms of the Mozilla Public
 *  License, v. 2.0. If a copy of the MPL was not distributed with this 
@@ -10748,8 +10832,8 @@ static UA_INLINE UA_AddReferencesResponse
 UA_Client_Service_addReferences(UA_Client *client,
                                 const UA_AddReferencesRequest request) {
     UA_AddReferencesResponse response;
-    __UA_Client_Service(client, &request, &UA_TYPES[UA_TYPES_ADDREFERENCESREQUEST],
-                        &response, &UA_TYPES[UA_TYPES_ADDREFERENCESRESPONSE]);
+    __UA_Client_Service(client, &request, &UA_TYPES[UA_TYPES_ADDNODESREQUEST],
+                        &response, &UA_TYPES[UA_TYPES_ADDNODESRESPONSE]);
     return response;
 }
 
@@ -10766,8 +10850,8 @@ static UA_INLINE UA_DeleteReferencesResponse
 UA_Client_Service_deleteReferences(UA_Client *client,
                                    const UA_DeleteReferencesRequest request) {
     UA_DeleteReferencesResponse response;
-    __UA_Client_Service(client, &request, &UA_TYPES[UA_TYPES_DELETEREFERENCESREQUEST],
-                        &response, &UA_TYPES[UA_TYPES_DELETEREFERENCESRESPONSE]);
+    __UA_Client_Service(client, &request, &UA_TYPES[UA_TYPES_DELETENODESREQUEST],
+                        &response, &UA_TYPES[UA_TYPES_DELETENODESRESPONSE]);
     return response;
 }
 
@@ -10920,7 +11004,7 @@ UA_Client_Service_publish(UA_Client *client, const UA_PublishRequest request) {
 #endif
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/include/ua_client_highlevel.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/include/ua_client_highlevel.h" ***********************************/
 
 /* This Source Code Form is subject to the terms of the Mozilla Public
 *  License, v. 2.0. If a copy of the MPL was not distributed with this 
@@ -11073,7 +11157,7 @@ UA_Client_readValueRankAttribute(UA_Client *client, const UA_NodeId nodeId,
 
 UA_StatusCode UA_EXPORT
 UA_Client_readArrayDimensionsAttribute(UA_Client *client, const UA_NodeId nodeId,
-                                       UA_UInt32 **outArrayDimensions,
+                                       UA_Int32 **outArrayDimensions,
                                        size_t *outArrayDimensionsSize);
 
 static UA_INLINE UA_StatusCode
@@ -11254,7 +11338,7 @@ UA_Client_writeValueRankAttribute(UA_Client *client, const UA_NodeId nodeId,
 
 UA_StatusCode UA_EXPORT
 UA_Client_writeArrayDimensionsAttribute(UA_Client *client, const UA_NodeId nodeId,
-                                        const UA_UInt32 *newArrayDimensions,
+                                        const UA_Int32 *newArrayDimensions,
                                         size_t newArrayDimensionsSize);
 
 static UA_INLINE UA_StatusCode
@@ -11543,7 +11627,7 @@ UA_Client_forEachChildNodeCall(UA_Client *client, UA_NodeId parentNodeId,
 #endif
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/plugins/ua_network_tcp.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/plugins/ua_network_tcp.h" ***********************************/
 
 /* This work is licensed under a Creative Commons CCZero 1.0 Universal License.
  * See http://creativecommons.org/publicdomain/zero/1.0/ for more information. */
@@ -11565,7 +11649,7 @@ UA_ClientConnectionTCP(UA_ConnectionConfig conf, const char *endpointUrl, UA_Log
 #endif
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/plugins/ua_log_stdout.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/plugins/ua_log_stdout.h" ***********************************/
 
 /* This work is licensed under a Creative Commons CCZero 1.0 Universal License.
  * See http://creativecommons.org/publicdomain/zero/1.0/ for more information. */
@@ -11585,7 +11669,7 @@ UA_Log_Stdout(UA_LogLevel level, UA_LogCategory category,
 #endif
 
 
-/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541/plugins/ua_config_standard.h" ***********************************/
+/*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/plugins/ua_config_standard.h" ***********************************/
 
 /* This work is licensed under a Creative Commons CCZero 1.0 Universal License.
  * See http://creativecommons.org/publicdomain/zero/1.0/ for more information. */

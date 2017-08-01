@@ -65,7 +65,7 @@ static int recvd = 0;
 
 static int shutdownThisThing = 0;
 
-char zkUA_zkServerAddressSpacePath[1024];
+char zkUA_zkServerQueuePath[1024];
 struct hashtable *taskTable;
 UA_Server *uaServerGlobal;
 
@@ -120,10 +120,41 @@ void zkUA_initializeTaskHashmap() {
     free(nodeValue);
     return nodeZkPath;
 }*/
+char *zkUA_getZkServQueuePath() {
+    return &zkUA_zkServerQueuePath[0];
+}
+char *zkUA_encodeServerQueuePath(const UA_String endpointURL) {
+    char *urlString = calloc(65535, sizeof(char));
+    char *queuePath = calloc(65535, sizeof(char));
+    snprintf(urlString, 65535, "%.*s", (int) endpointURL.length, endpointURL.data);
+    snprintf(queuePath, 65535, "%s/%s", zkUA_getZkServQueuePath(), urlString);
+    free(urlString);
+    return queuePath;
+}
 /* Initialize ZkServerQueuePath string and the path on ZooKeeper */
 void zkUA_initializeZkServerQueuePath(char *groupGuid, zhandle_t *zh) {
     int rc = -1;
     int flags = 0;
+
+    /* Initialize the Queue path for the redundancy group */
+    char *zkQueuePath = (char *) calloc(65535, sizeof(char));
+    snprintf(zkQueuePath, 65535, "/Servers/%s/Queue", groupGuid);
+    /* Set the qlobal Queue path variable */
+    snprintf(&zkUA_zkServerQueuePath[0], 1024, "%s", zkQueuePath);
+    /* Check that the Queue path exists for the redundancy set on zk */
+    fprintf(stderr, "Checking if queue path exists on zk: %s\n", zkQueuePath);
+    struct Stat stat;
+    rc = zoo_exists(zh, zkQueuePath, 0, &stat);
+    if (rc == ZOK) {
+        fprintf(stderr, "zkUA_initializeZkServerQueuePath: The path exists: %s \n", zkQueuePath);
+        free(zkQueuePath);
+        return;
+    } else if (rc != ZNONODE) {
+        /* TODO: Handle rc = ZNOAUTH | ZBADARGUMENTS | ZINVALIDSTATE | ZMARSHALLINGERROR
+         * Operation: Free memory and exit */
+    }
+
+    /* Otherwise, let's initialize the path */
     /* Create a permanent /Servers node */
     char *path = "/Servers";
     char *path_buffer = calloc(65535, sizeof(char));
@@ -133,7 +164,7 @@ void zkUA_initializeZkServerQueuePath(char *groupGuid, zhandle_t *zh) {
                 path_buffer, 65535);
     free(path_buffer);
     if (rc) {
-        fprintf(stderr, "zkUA_initializeZkServAddSpacePath Error %d for %s\n",
+        fprintf(stderr, "zkUA_initializeZkServerQueuePath: Error %d for %s\n",
                 rc, path);
         zkUA_error2String(rc);
     }
@@ -141,25 +172,25 @@ void zkUA_initializeZkServerQueuePath(char *groupGuid, zhandle_t *zh) {
     /* Create a path to hold the serverAddress URI */
     char *zkServerPath = (char *) calloc(65535, sizeof(char));
     snprintf(zkServerPath, 65535, "/Servers/%s", groupGuid);
-    fprintf(stderr, "Pushing to zk: %s\n", zkServerPath);
+    fprintf(stderr, "zkUA_initializeZkServerQueuePath: Pushing to zk: %s\n", zkServerPath);
     /* Push serverAddress URI to zk */
     rc = zoo_acreate(zkHandle, zkServerPath, " ", 3, &ZOO_OPEN_ACL_UNSAFE,
             flags, zkUA_my_string_completion_free_data, strdup(path));
     if (rc) {
-        fprintf(stderr, "Error %d for %s\n", rc, path);
+        fprintf(stderr, "zkUA_initializeZkServerQueuePath: Error %d for %s\n", rc, path);
     }
 
    /*  Create a path to hold the server's tasks */
-    char *zkQueuePath = (char *) calloc(65535, sizeof(char));
-    snprintf(zkQueuePath, 65535, "%s/Queue", zkServerPath);
+//    char *zkQueuePath = (char *) calloc(65535, sizeof(char));
+//    snprintf(zkQueuePath, 65535, "%s/Queue", zkServerPath);
     rc = zoo_acreate(zkHandle, zkQueuePath, " ", 3, &ZOO_OPEN_ACL_UNSAFE,
             flags, zkUA_my_string_completion_free_data,
             strdup(zkQueuePath));
+    fprintf(stderr, "zkUA_initializeZkServerQueuePath: Pushing to zk: %s\n", zkQueuePath);
     if (rc) {
-        fprintf(stderr, "Error %d for %s\n", rc, path);
+        fprintf(stderr, "zkUA_initializeZkServerQueuePath: Error %d for %s\n", rc, path);
     }
     free(zkServerPath);
-//    snprintf(&zkUA_zkServerAddressSpacePath[0], 1024, "%s", zkAddressSpacePath);
     free(zkQueuePath);
 }
 

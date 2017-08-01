@@ -66,6 +66,8 @@ void zkUA_initializeTaskHashmap();
  * TODO: Support different identifier types. Currently only supports numeric identifiers.
  */
 //char *zkUA_encodeZnodePath(const UA_NodeId *nodeId);
+char *zkUA_getZkServQueuePath() ;
+char *zkUA_encodeServerQueuePath(const UA_String endpointURL);
 /**
  * zkUA_initializeZkServAddSpacePath:
  * Initializes the zkServerAddressSpacePath string with the path to the OPC UA Server's

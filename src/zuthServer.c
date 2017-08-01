@@ -52,6 +52,61 @@ void intHandler(int signum) {
     running = false;
 }
 
+/**
+ * Code for Encoding/Decoding URLs
+ * Credit goes to: http://www.geekhideout.com/urlcode.shtml
+ */
+
+/* Converts a hex character to its integer value */
+char from_hex(char ch) {
+  return isdigit(ch) ? ch - '0' : tolower(ch) - 'a' + 10;
+}
+
+/* Converts an integer value to its hex character*/
+char to_hex(char code) {
+  static char hex[] = "0123456789abcdef";
+  return hex[code & 15];
+}
+
+/* Returns a url-encoded version of str */
+/* IMPORTANT: be sure to free() the returned string after use */
+char *zkUA_url_encode(char *str) {
+  char *pstr = str, *buf = malloc(strlen(str) * 3 + 1), *pbuf = buf;
+  while (*pstr) {
+    if (isalnum(*pstr) || *pstr == '-' || *pstr == '_' || *pstr == '.' || *pstr == '~')
+      *pbuf++ = *pstr;
+    else if (*pstr == ' ')
+      *pbuf++ = '+';
+    else
+      *pbuf++ = '%', *pbuf++ = to_hex(*pstr >> 4), *pbuf++ = to_hex(*pstr & 15);
+    pstr++;
+  }
+  *pbuf = '\0';
+  return buf;
+}
+
+/* Returns a url-decoded version of str */
+/* IMPORTANT: be sure to free() the returned string after use */
+char *zkUA_url_decode(char *str) {
+  char *pstr = str, *buf = malloc(strlen(str) + 1), *pbuf = buf;
+  while (*pstr) {
+    if (*pstr == '%') {
+      if (pstr[1] && pstr[2]) {
+        *pbuf++ = from_hex(pstr[1]) << 4 | from_hex(pstr[2]);
+        pstr += 2;
+      }
+    } else if (*pstr == '+') {
+      *pbuf++ = ' ';
+    } else {
+      *pbuf++ = *pstr;
+    }
+    pstr++;
+  }
+  *pbuf = '\0';
+  return buf;
+}
+
+
 static void zkUA_queueWatcher(zhandle_t *zzh, int type, int state,
         const char *path, void* context) {
 
@@ -105,44 +160,39 @@ static void zkUA_queueWatcher(zhandle_t *zzh, int type, int state,
     }
 }
 
-static void init_UA_Server(void *retval, zkUA_Config *zkUAConfigs) {
+static void init_ZUTH_Server(void *retval, zkUA_Config *zkUAConfigs) {
 
     UA_StatusCode *statuscode = (UA_StatusCode *) retval;
     int flags = 0;
-
+    int rc;
 
     /* Convert Guid to string */
     char *groupGuid = calloc(65535, sizeof(char));
     snprintf(groupGuid, 65535, UA_PRINTF_GUID_FORMAT,
             UA_PRINTF_GUID_DATA(zkUAConfigs->guid));
-    /* Check that the Queue path exists for the redundancy set on zk */
-    char *zkQueuePath = (char *) calloc(65535, sizeof(char));
-    snprintf(zkQueuePath, 65535, "/Servers/%s/Queue", groupGuid);
-    fprintf(stderr, "Checking if queue path exists on zk: %s\n", zkQueuePath);
-    struct String_vector strings;
-    int rc = zoo_get_children(zh, zkQueuePath, 0, &strings);
-    if (rc == ZOK) {
-        if (&strings) {
-            if (strings.count > 0) {
-                fprintf(stderr, "The queues path exists and there are strings!\n");
-            }
-        }
-    } else { /* The path does not exist, create it */
-        zkUA_initializeZkServerQueuePath(groupGuid, zh);
-    }
-    /* Initialise the tasks assignment path for this NTR server */
+    /* Check that the Queue path exists for the redundancy set on zk
+     * and initialize it if it does not */
+    zkUA_initializeZkServerQueuePath(groupGuid, zh);
+
+    /* Initialize the tasks assignment path for this NTR server */
     char *serverUri = calloc(65535, sizeof(char));
     snprintf(serverUri, 65535, "opc.tcp://%s:%lu", zkUAConfigs->hostname,
             zkUAConfigs->uaPort); /* using config file hostname & port */
-    char *encodedServerUri = zkUA_url_encode(serverUri);
+    char *encodedServerUri = (char *) zkUA_url_encode(serverUri);
+    if(encodedServerUri == NULL)
+        fprintf(stderr, "init_ZUTH_Server: encodedServerUri is NULL!");
+    else
+        fprintf(stderr, "init_ZUTH_Server: encodedServerUri is %s\n", encodedServerUri);
     char *serverTaskPath = calloc(65535, sizeof(char));
-    snprintf(serverTaskPath, 65535, "%s/%s", zkQueuePath, encodedServerUri);
+    snprintf(serverTaskPath, 65535, "%s/%s", zkUA_getZkServQueuePath(), encodedServerUri);
     char *path_buffer = calloc(65535, sizeof(char));
     int path_buffer_len = 65535;
+    flags = ZOO_EPHEMERAL;
+    fprintf(stderr, "init_ZUTH_Server: Pushing task path %s\n", serverTaskPath);
     rc = zoo_create(zh, serverTaskPath, " ", 3, &ZOO_OPEN_ACL_UNSAFE,
              flags, path_buffer, path_buffer_len);
-     if (rc!=ZOK || rc!=ZNODEEXISTS) {
-         fprintf(stderr, "Error %d for %s\n", rc, serverTaskPath);
+     if (rc!=ZOK) {
+         fprintf(stderr, "init_ZUTH_Server: Error %d for %s\n", rc, serverTaskPath);
          intHandler(SIGINT);
      }
     /* Initialize the hashmap that holds the newest task's ID for each session ID*/
@@ -190,6 +240,7 @@ static void init_UA_Server(void *retval, zkUA_Config *zkUAConfigs) {
 */
     /* start server */
     statuscode = UA_Server_run(server, &running); //UA_blocks until running=false
+    fprintf(stderr, "init_ZUTH_Server: Exiting after server run\n");
     /* ctrl-c received -> clean up */
     UA_Server_delete(server);
     nl.deleteMembers(&nl);
@@ -199,7 +250,7 @@ static void init_UA_Server(void *retval, zkUA_Config *zkUAConfigs) {
     free(serverTaskPath);
     free(path_buffer);
     free_zkUAConfigs(zkUAConfigs);
-    fprintf(stderr, "init_UA_Server: Exiting with code %d\n", statuscode);
+    fprintf(stderr, "init_ZUTH_Server: Exiting with code %d\n", statuscode);
 }
 
 int main() {
@@ -231,7 +282,7 @@ int main() {
     }
 
     UA_StatusCode *retval;
-    init_UA_Server((void *) retval, &zkUAConfigs);
+    init_ZUTH_Server((void *) retval, &zkUAConfigs);
     if (to_send != 0)
         fprintf(stderr, "Recvd %d responses for %d requests sent\n", recvd,
                 sent);

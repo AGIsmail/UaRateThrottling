@@ -96,7 +96,6 @@ static void init_UA_client(void* retval, zkUA_Config *zkUAConfigs) {
             UA_PRINTF_GUID_DATA(zkUAConfigs->guid));
     /* Run service calls through zookeeper task assignment */
 //    zkUA_UAServerAddressSpace(zh, client, serverDst, groupGuid);
-
     UA_Client_disconnect(client);
     free(groupGuid);
     free(serverDst);
