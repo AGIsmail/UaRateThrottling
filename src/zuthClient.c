@@ -7,7 +7,7 @@
 #include <nodeset.h>
 #include <zk_cli.h>
 #include <zk_global.h>
-
+#include <zuthClientSend.h>
 /**
  * ZooKeeper libraries
  */
@@ -96,6 +96,24 @@ static void init_UA_client(void* retval, zkUA_Config *zkUAConfigs) {
             UA_PRINTF_GUID_DATA(zkUAConfigs->guid));
     /* Run service calls through zookeeper task assignment */
 //    zkUA_UAServerAddressSpace(zh, client, serverDst, groupGuid);
+    /* Use the raw read attribute to submit a task */
+    UA_String *endpointUrlUAString = UA_getClientEndpointUrl(client);
+    char *endpointUrl = calloc(65535, sizeof(char));
+    snprintf(endpointUrl, 65535, "%.*s",
+            (int) endpointUrlUAString->length,
+            endpointUrlUAString->data);
+    char *taskPath = zkUA_encodeServerQueuePath(*endpointUrlUAString);
+    UA_ReadValueId item;
+    UA_ReadValueId_init(&item);
+    item.nodeId = UA_NODEID_NUMERIC(0,UA_NS0ID_SERVERSTATE);
+    item.attributeId = UA_ATTRIBUTEID_DISPLAYNAME;
+    UA_ReadRequest request;
+    UA_ReadRequest_init(&request);
+    request.nodesToRead = &item;
+    request.nodesToReadSize = 1;
+    UA_ReadResponse response = ZUTH_Client_Service_read(zh, taskPath, client, request);
+
+    /* Disconnect and exit */
     UA_Client_disconnect(client);
     free(groupGuid);
     free(serverDst);

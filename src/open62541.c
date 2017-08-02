@@ -4744,6 +4744,30 @@ struct UA_Client {
 #endif
 };
 
+UA_String *UA_getClientEndpointUrl(UA_Client *client){
+    return &client->endpointUrl;
+
+}
+void UA_setClientState(UA_Client *client, int state){
+    client->state = state;
+}
+UA_NodeId UA_getClientAuthToken(UA_Client *client){
+    return client->authenticationToken;
+}
+
+UA_UInt32 UA_getClientRequestHandle(UA_Client *client){
+    return client->requestHandle;
+}
+UA_UInt32 UA_getClientRequestId(UA_Client *client){
+    return client->requestId;
+}
+
+void UA_setClientRequestHandle(UA_Client *client, UA_UInt32 rHandle){
+    client->requestHandle = rHandle;
+}
+void UA_setClientRequestId(UA_Client *client, UA_UInt32 rId){
+    client->requestId = rId;
+}
 
 /*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/src/ua_types.c" ***********************************/
 
@@ -25419,6 +25443,47 @@ __UA_Client_Service(UA_Client *client, const void *request, const UA_DataType *r
     UA_NodeId_init(&rr->authenticationToken);
 }
 
+void ZUTH_receiveUAClientServiceResponse(UA_Client *client, const void *request, const UA_DataType *requestType,
+        void *response, const UA_DataType *responseType, int requestId){
+
+    UA_RequestHeader *rr = (UA_RequestHeader*)(uintptr_t)request;
+    UA_ResponseHeader *respHeader = (UA_ResponseHeader*)response;
+    UA_StatusCode retval;
+
+    /* Prepare the response and the structure we give into processServiceResponse */
+    UA_init(response, responseType);
+    struct ResponseDescription rd = {client, false, requestId, response, responseType};
+
+    /* Retrieve the response */
+    UA_DateTime maxDate = UA_DateTime_nowMonotonic() + (client->config.timeout * UA_MSEC_TO_DATETIME);
+    do {
+        /* Retrieve complete chunks */
+        UA_ByteString reply = UA_BYTESTRING_NULL;
+        UA_Boolean realloced = false;
+        UA_DateTime now = UA_DateTime_nowMonotonic();
+        if(now < maxDate) {
+            UA_UInt32 timeout = (UA_UInt32)((maxDate - now) / UA_MSEC_TO_DATETIME);
+            retval = UA_Connection_receiveChunksBlocking(&client->connection, &reply, &realloced, timeout);
+        } else {
+            retval = UA_STATUSCODE_GOODNONCRITICALTIMEOUT;
+        }
+        if(retval != UA_STATUSCODE_GOOD) {
+            respHeader->serviceResult = retval;
+            break;
+        }
+        /* ProcessChunks and call processServiceResponse for complete messages */
+        UA_SecureChannel_processChunks(&client->channel, &reply,
+                                       (UA_ProcessMessageCallback*)processServiceResponse, &rd);
+        /* Free the received buffer */
+        if(!realloced)
+            client->connection.releaseRecvBuffer(&client->connection, &reply);
+        else
+            UA_ByteString_deleteMembers(&reply);
+    } while(!rd.processed);
+
+     /* Clean up the authentication token */
+     UA_NodeId_init(&rr->authenticationToken);
+ }
 /*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/src/client/ua_client_highlevel.c" ***********************************/
 
 /* This Source Code Form is subject to the terms of the Mozilla Public

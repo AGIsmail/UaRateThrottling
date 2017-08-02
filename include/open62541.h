@@ -10711,7 +10711,17 @@ typedef enum {
 
 struct UA_Client;
 typedef struct UA_Client UA_Client;
-
+/* Functions included to assist with zuthClientSend.c and .h */
+UA_String UA_EXPORT *UA_getClientEndpointUrl(UA_Client *client);
+void UA_EXPORT UA_setClientState(UA_Client *client, int state);
+UA_NodeId UA_EXPORT UA_getClientAuthToken(UA_Client *client);
+UA_UInt32 UA_EXPORT UA_getClientRequestHandle(UA_Client *client);
+UA_UInt32 UA_EXPORT UA_getClientRequestId(UA_Client *client);
+void UA_setClientRequestHandle(UA_Client *client, UA_UInt32 rHandle);
+void UA_setClientRequestId(UA_Client *client, UA_UInt32 rId);
+void ZUTH_receiveUAClientServiceResponse(UA_Client *client, const void *request, const UA_DataType *requestType,
+        void *response, const UA_DataType *responseType, int requestId);
+/* End of zuthClientSend assistance */
 /* Create a new client
  *
  * @param config for the new client. You can use UA_ClientConfig_standard
