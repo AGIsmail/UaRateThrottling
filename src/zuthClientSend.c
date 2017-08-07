@@ -14,7 +14,7 @@
 //#include <zookeeper.h>
 
 
-void ZUTH_jsonEncode_requestHeader(UA_RequestHeader *rr, json_t *jsonObject) {
+void ZUTH_jsonEncode_requestHeader(UA_RequestHeader *rr, json_t *reqHeader) {
 
     json_t *aToken = json_object();
     zkUA_jsonEncode_UA_NodeId(&rr->authenticationToken, aToken);
@@ -27,7 +27,6 @@ void ZUTH_jsonEncode_requestHeader(UA_RequestHeader *rr, json_t *jsonObject) {
     json_t *additionalHeader= json_object();
     zkUA_jsonEncode_UA_ExtensionObject(&rr->additionalHeader, additionalHeader);
 
-    json_t *reqHeader = json_object();
     json_object_set_new(reqHeader, "authenticationToken", aToken);
     json_object_set_new(reqHeader, "timestamp", timestamp);
     json_object_set_new(reqHeader, "requestHandle", requestHandle);
@@ -35,6 +34,8 @@ void ZUTH_jsonEncode_requestHeader(UA_RequestHeader *rr, json_t *jsonObject) {
     json_object_set_new(reqHeader, "auditEntryId", auditEntryId);
     json_object_set_new(reqHeader, "timeoutHint", timeoutHint);
     json_object_set_new(reqHeader, "additionalHeader", additionalHeader);
+//    char *s = json_dumps(reqHeader,  JSON_INDENT(1));
+//    fprintf(stderr, "ZUTH_jsonEncode_requestHeader: %s\n", s);
 
 }
 
@@ -87,18 +88,7 @@ __ZUTH_Client_Service(zhandle_t *zh, const char *taskPath, UA_Client *client, co
         fprintf(stderr, "ZUTH__UA_Client_Service: Created a task with the path %s \n %s\n", path_buffer, s);
     }
     free(s);
-//    free(queuePath);
-
-/*    retval = UA_SecureChannel_sendBinaryMessage(&client->channel, requestId, rr, requestType);
-    if(retval != UA_STATUSCODE_GOOD) {
-        if(retval == UA_STATUSCODE_BADENCODINGLIMITSEXCEEDED)
-            respHeader->serviceResult = UA_STATUSCODE_BADREQUESTTOOLARGE;
-        else
-            respHeader->serviceResult = retval;
-        client->state = UA_CLIENTSTATE_FAULTED;
-        UA_NodeId_init(&rr->authenticationToken);
-        return;
-    }*/
+    free(path_buffer);
 
     /* Prepare the response and the structure we give into processServiceResponse */
     ZUTH_receiveUAClientServiceResponse(client, request, requestType,
