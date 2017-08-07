@@ -97,11 +97,8 @@ static void init_UA_client(void* retval, zkUA_Config *zkUAConfigs) {
     /* Run service calls through zookeeper task assignment */
 //    zkUA_UAServerAddressSpace(zh, client, serverDst, groupGuid);
     /* Use the raw read attribute to submit a task */
+
     UA_String *endpointUrlUAString = UA_getClientEndpointUrl(client);
-    char *endpointUrl = calloc(65535, sizeof(char));
-    snprintf(endpointUrl, 65535, "%.*s",
-            (int) endpointUrlUAString->length,
-            endpointUrlUAString->data);
     /* Initialize the global variable with the server redundancy group
      * task queue path */
     zkUA_setGroupGuidPath(groupGuid);

@@ -71,8 +71,10 @@ void zkUA_setGroupGuidPath(char *groupGuid);
 char *zkUA_getGroupGuidPath();
 void zkUA_setQueuePath();
 char *zkUA_getQueuePath();
-char *zkUA_encodeServerQueuePath(const UA_String endpointURL);
 char *zkUA_getActivePath();
+char *zkUA_setServerQueuePath(const UA_String endpointURL);
+char *zkUA_encodeServerQueuePath(const UA_String endpointURL);
+
 
 /**
  * zkUA_initializeZkServAddSpacePath:

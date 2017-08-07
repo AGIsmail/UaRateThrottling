@@ -149,15 +149,25 @@ char *zkUA_getActivePath(){
     snprintf(zkServerActivePath, 65535, "%s/Active", zkUA_getGroupGuidPath());
     return zkServerActivePath;
 }
-char *zkUA_encodeServerQueuePath(const UA_String endpointURL) {
+
+char *zkUA_setServerQueuePath(const UA_String endpointURL){
     char *urlString = calloc(65535, sizeof(char));
-    char *queuePath = calloc(65535, sizeof(char));
     snprintf(urlString, 65535, "%.*s", (int) endpointURL.length, endpointURL.data);
     char *encodedUrlString = zkUA_url_encode(urlString);
-    snprintf(queuePath, 65535, "%s/%s/task-", zkUA_getQueuePath(), encodedUrlString);
-    free(urlString);
+    char *queuePath = calloc(65535, sizeof(char));
+    snprintf(queuePath, 65535, "%s/%s", zkUA_getQueuePath(), encodedUrlString);
+    fprintf(stderr,"zkUA_setServerQueuePath: queuePath %s\n", queuePath);
     free(encodedUrlString);
+    free(urlString);
     return queuePath;
+}
+char *zkUA_encodeServerQueuePath(const UA_String endpointURL) {
+    char *encodedUrlString = zkUA_setServerQueuePath(endpointURL);
+    char *taskPath = calloc(65535, sizeof(char));
+    snprintf(taskPath, 65535, "%s/task-", encodedUrlString);
+    fprintf(stderr,"zkUA_encodeServerQueuePath: taskPath %s\n", taskPath);
+    free(encodedUrlString);
+    return taskPath;
 }
 
 

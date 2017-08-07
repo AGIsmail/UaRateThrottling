@@ -39,7 +39,7 @@ UA_Server *server;
 UA_ServerNetworkLayer nl;
 zhandle_t *zh;
 zhandle_t *zkHandle; /* Global variable */
-
+char *serverQueuePath;
 static clientid_t myid;
 
 static int to_send = 0;
@@ -52,6 +52,63 @@ void intHandler(int signum) {
     running = false;
 }
 
+void zuth_extractTaskId(const void *tId, char *taskId){
+    const char *task = "task-";
+    /* locate the task substring */
+    char *locTask = strstr(*(char *const *) tId, task);
+    /* determine the size of the task digits */
+    size_t sizeOfTask = strlen(locTask) - strlen(task);
+    /* copy the task Id into the store */
+    strncpy(taskId, locTask + strlen(task), sizeOfTask);
+}
+
+static int taskIdCmp(const void *tId1, const void *tId2){
+    char *taskId1 = calloc(65535, sizeof(char));
+    char *taskId2 = calloc(65535, sizeof(char));
+
+    zuth_extractTaskId(tId1, taskId1);
+    zuth_extractTaskId(tId2, taskId2);
+
+    /* convert the task Id's from string to long long */
+    long long tI1, tI2;
+    tI1 = strtoll(taskId1, NULL, 10);
+    tI2 = strtoll(taskId2, NULL, 10);
+
+    /* compare the task Id's */
+    if (tI1 != tI2){
+        free(taskId1);
+        free(taskId2);
+        if (tI1 < tI2)
+            return -1;
+        if (tI1 > tI2)
+            return 1;
+    } else fprintf(stderr, "taskIdCmp: Two tasks with the same Id! \n %s \n %s \n\n", tId1, tId2);
+    return 0;
+
+}
+void zuth_processTasks(int rc, const struct String_vector *strings, const void *data){
+    if (rc!=ZOK){
+        fprintf(stderr, "ZooKeeper error upon processing tasks\n");
+        intHandler(SIGINT);
+    }
+    fprintf(stderr, "zuth_ProcessTasks: Processing Tasks from path %s..\n", data);
+    /* loop through all of the returned zk children */
+     if (strings) {
+         /* Sort array of returned children so that we add the nodes in ascending order of
+          node IDs (assuming of course that a child will never have a smaller NodeId than a parent) */
+         qsort(strings->data, strings->count, sizeof(char *), taskIdCmp);
+         for (int i = 0; i < (strings->count); i++) {
+             fprintf(stderr, "zuth_processTasks:\t%s\n",
+                                 strings->data[i]);
+         }
+     }
+
+    /* Extract the task ID */
+    /* Get data of each task and execute it sequentially */
+//            zkUA_handleNewTasks(zzh, zkUA_zkServAddSpacePath(), server);
+//            zkUA_UA_Server_replicateZk(zzh, zkUA_zkServAddSpacePath(), server);
+    free(data);
+}
 static void zkUA_queueWatcher(zhandle_t *zzh, int type, int state,
         const char *path, void* context) {
 
@@ -74,13 +131,11 @@ static void zkUA_queueWatcher(zhandle_t *zzh, int type, int state,
         if (type == ZOO_CHILD_EVENT) {
             /* A task was created/deleted */
             /* Get the tasks list */
-            /* Extract the task ID */
-            /* Get data of each task and execute it sequentially */
-//            zkUA_handleNewTasks(zzh, zkUA_zkServAddSpacePath(), server);
-//            zkUA_UA_Server_replicateZk(zzh, zkUA_zkServAddSpacePath(), server);
             fprintf(stderr,
-                    "zkUA_queueWatcher: A node was created or deleted under %s - replicating full addressSpace\n",
+                    "zkUA_queueWatcher: A node was created or deleted under %s\n",
                     termPath);
+            struct String_vector strings;
+            zoo_aget_children(zh, serverQueuePath, 1 /*watch*/, zuth_processTasks, strdup(serverQueuePath));
         }
         free(termPath);
     }
@@ -126,37 +181,46 @@ static void init_ZUTH_Server(void *retval, zkUA_Config *zkUAConfigs) {
     char *encodedServerUri = (char *) zkUA_url_encode(serverUri);
 
     char *serverTaskPath = calloc(65535, sizeof(char));
-    snprintf(serverTaskPath, 65535, "%s/%s", zkUA_getQueuePath(), encodedServerUri);
+    snprintf(serverTaskPath, 65535, "%s/%s", zkUA_getQueuePath(),
+            encodedServerUri);
     char *path_buffer = calloc(65535, sizeof(char));
     int path_buffer_len = 65535;
     fprintf(stderr, "init_ZUTH_Server: Pushing task path %s\n", serverTaskPath);
-    rc = zoo_create(zh, serverTaskPath, " ", 3, &ZOO_OPEN_ACL_UNSAFE,
-             flags, path_buffer, path_buffer_len);
-     if (rc!=ZOK && rc!=ZNODEEXISTS){
+    rc = zoo_create(zh, serverTaskPath, " ", 3, &ZOO_OPEN_ACL_UNSAFE, flags,
+            path_buffer, path_buffer_len);
+    if (rc != ZOK && rc != ZNODEEXISTS) {
         fprintf(stderr,
                 "init_ZUTH_Server: Error %d (node exists is %d) for %s  - Exiting\n",
                 rc, ZNODEEXISTS, serverTaskPath);
         zkUA_error2String(rc);
         intHandler(SIGINT);
-     }
-     /* Pushing server is active EPH znode */
-     flags = 0;
-     flags |= ZOO_EPHEMERAL;
-     char *activePath = zkUA_getActivePath();
-     char *serverActivePath = calloc(65535, sizeof(char));
-     snprintf(serverActivePath, 65535, "%s/%s", activePath, encodedServerUri);
-     fprintf(stderr, "init_ZUTH_Server: Pushing server is active to zk: %s\n", serverActivePath);
-     rc = zoo_create(zh, serverActivePath, " ", 3, &ZOO_OPEN_ACL_UNSAFE,
-              flags, path_buffer, path_buffer_len); /* I don't care about path_buffer to memset it */
-      if (rc!=ZOK) {
-          fprintf(stderr, "init_ZUTH_Server: Error %d for %s - Exiting\n", rc, serverActivePath);
-          zkUA_error2String(rc);
-          intHandler(SIGINT);
-      }
-      free(activePath);
-      free(serverActivePath);
+    }
+    /* Pushing server is active EPH znode */
+    flags = 0;
+    flags |= ZOO_EPHEMERAL;
+    char *activePath = zkUA_getActivePath();
+    char *serverActivePath = calloc(65535, sizeof(char));
+    snprintf(serverActivePath, 65535, "%s/%s", activePath, encodedServerUri);
+    fprintf(stderr, "init_ZUTH_Server: Pushing server is active to zk: %s\n",
+            serverActivePath);
+    rc = zoo_create(zh, serverActivePath, " ", 3, &ZOO_OPEN_ACL_UNSAFE, flags,
+            path_buffer, path_buffer_len); /* I don't care about path_buffer to memset it */
+    if (rc != ZOK) {
+        fprintf(stderr, "init_ZUTH_Server: Error %d for %s - Exiting\n", rc,
+                serverActivePath);
+        zkUA_error2String(rc);
+        intHandler(SIGINT);
+    }
+    free(activePath);
+    free(serverActivePath);
     /* Initialize the hashmap that holds the newest task's ID for each session ID*/
-    zkUA_initializeTaskHashmap();
+    zkUA_initializeTaskHashmap(); // Why?
+    /* Get the tasks and set a watch */
+    UA_String endpointURL = UA_String_fromChars(serverUri);
+    serverQueuePath= zkUA_setServerQueuePath(endpointURL);
+    struct String_vector strings;
+    fprintf(stderr, "init_ZUTH_Server: Setting a watch on %s\n", serverQueuePath);
+    zoo_aget_children(zh, serverQueuePath, 1 /*watch*/, zuth_processTasks, strdup(serverQueuePath));
     /* initialize the server */
     UA_ServerConfig config = UA_ServerConfig_standard;
     nl = UA_ServerNetworkLayerTCP(UA_ConnectionConfig_standard,
@@ -169,35 +233,35 @@ static void init_ZUTH_Server(void *retval, zkUA_Config *zkUAConfigs) {
     /* More initializations */
     zkUA_initializeUaServerGlobal((void *) server);
 
-/*    switch (zkUAConfigs->rSupport) {
-    case (2):  Warm Redundancy
-    case (3): {  Hot redundancy
-         Replicate or initialize addressSpace
-        zoo_aget_children(zh, zkUA_zkServAddSpacePath(), 0,
-                zkUA_checkAddressSpaceExists, &zkUAConfigs->guid);
-        if (!zkUAConfigs->state) {  inactive server - await activation signal from the failover controller
-             write server status as suspended
-            zkUA_writeServerStatus(3);
-        }
-        break;
-    }
-    case (0):  Standalone server
-    case (1):  Cold redundancy
-    case (4):  Transparent Redundancy
-    case (5): {  Hot+ Redundancy
-        if (zkUAConfigs->state) {  active server
-            zoo_aget_children(zh, zkUA_zkServAddSpacePath(), 0,
-                    zkUA_checkAddressSpaceExists, &zkUAConfigs->guid);
-             create thread to monitor changes to address space and apply them locally
-        } else {  inactive server - error
-            fprintf(stderr,
-                    "init_UA_server: Error! Initialized as an inactive server. Exiting...\n");
-            pthread_exit(&statuscode);  race?
-        }
-        break;
-    }
-    }
-*/
+    /*    switch (zkUAConfigs->rSupport) {
+     case (2):  Warm Redundancy
+     case (3): {  Hot redundancy
+     Replicate or initialize addressSpace
+     zoo_aget_children(zh, zkUA_zkServAddSpacePath(), 0,
+     zkUA_checkAddressSpaceExists, &zkUAConfigs->guid);
+     if (!zkUAConfigs->state) {  inactive server - await activation signal from the failover controller
+     write server status as suspended
+     zkUA_writeServerStatus(3);
+     }
+     break;
+     }
+     case (0):  Standalone server
+     case (1):  Cold redundancy
+     case (4):  Transparent Redundancy
+     case (5): {  Hot+ Redundancy
+     if (zkUAConfigs->state) {  active server
+     zoo_aget_children(zh, zkUA_zkServAddSpacePath(), 0,
+     zkUA_checkAddressSpaceExists, &zkUAConfigs->guid);
+     create thread to monitor changes to address space and apply them locally
+     } else {  inactive server - error
+     fprintf(stderr,
+     "init_UA_server: Error! Initialized as an inactive server. Exiting...\n");
+     pthread_exit(&statuscode);  race?
+     }
+     break;
+     }
+     }
+     */
     /* start server */
     statuscode = UA_Server_run(server, &running); //UA_blocks until running=false
     fprintf(stderr, "init_ZUTH_Server: Exiting after server run\n");
@@ -233,8 +297,8 @@ int main() {
     zoo_set_debug_level(ZOO_LOG_LEVEL_WARN);
     zoo_deterministic_conn_order(1); // enable deterministic order
     /* set global zookeeper handle variable */
-    zh = zookeeper_init(zkUAConfigs.zooKeeperQuorum,
-            zkUA_queueWatcher, 30000, &myid, 0, 0);
+    zh = zookeeper_init(zkUAConfigs.zooKeeperQuorum, zkUA_queueWatcher, 30000,
+            &myid, 0, 0);
     zkHandle = zh;
     if (!zh) {
         return errno;
