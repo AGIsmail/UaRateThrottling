@@ -102,6 +102,11 @@ static void init_UA_client(void* retval, zkUA_Config *zkUAConfigs) {
     snprintf(endpointUrl, 65535, "%.*s",
             (int) endpointUrlUAString->length,
             endpointUrlUAString->data);
+    /* Initialize the global variable with the server redundancy group
+     * task queue path */
+    zkUA_setGroupGuidPath(groupGuid);
+    zkUA_setQueuePath();
+    /* Encode the tasks path for the specific endpoint */
     char *taskPath = zkUA_encodeServerQueuePath(*endpointUrlUAString);
     UA_ReadValueId item;
     UA_ReadValueId_init(&item);
@@ -112,6 +117,7 @@ static void init_UA_client(void* retval, zkUA_Config *zkUAConfigs) {
     request.nodesToRead = &item;
     request.nodesToReadSize = 1;
     UA_ReadResponse response = ZUTH_Client_Service_read(zh, taskPath, client, request);
+//    fprintf(stderr, "zuthClient: taskPath is %s", taskPath);
 
     /* Disconnect and exit */
     UA_Client_disconnect(client);

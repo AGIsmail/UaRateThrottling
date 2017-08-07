@@ -81,7 +81,10 @@ __ZUTH_Client_Service(zhandle_t *zh, const char *taskPath, UA_Client *client, co
     int flags = ZOO_SEQUENCE;
     int rc = zoo_create(zh, taskPath, s, strlen(s), &ZOO_OPEN_ACL_UNSAFE, flags, path_buffer, path_buffer_len);
     if(rc){
-        fprintf(stderr, "ZUTH__UA_Client_Service: Could not create a task under the queue path %s - Task \n %s\n", taskPath, s);
+        fprintf(stderr, "ZUTH__UA_Client_Service: Could not create a task with the path %s \n %s\n", path_buffer, s);
+        zkUA_error2String(rc);
+    } else {
+        fprintf(stderr, "ZUTH__UA_Client_Service: Created a task with the path %s \n %s\n", path_buffer, s);
     }
     free(s);
 //    free(queuePath);

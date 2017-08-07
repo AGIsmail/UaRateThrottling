@@ -32,7 +32,6 @@ char *zkUA_url_encode(char *str) {
     pstr++;
   }
   *pbuf = '\0';
-  fprintf(stderr, "buf is %s pointer %p\n", buf, buf);
   return buf;
 }
 

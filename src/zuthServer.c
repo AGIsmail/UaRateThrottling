@@ -124,22 +124,37 @@ static void init_ZUTH_Server(void *retval, zkUA_Config *zkUAConfigs) {
     snprintf(serverUri, 65535, "opc.tcp://%s:%lu", zkUAConfigs->hostname,
             zkUAConfigs->uaPort); /* using config file hostname & port */
     char *encodedServerUri = (char *) zkUA_url_encode(serverUri);
-    if(encodedServerUri == NULL)
-        fprintf(stderr, "init_ZUTH_Server: encodedServerUri is NULL!");
-    else
-        fprintf(stderr, "init_ZUTH_Server: encodedServerUri is %s\n", encodedServerUri);
+
     char *serverTaskPath = calloc(65535, sizeof(char));
-    snprintf(serverTaskPath, 65535, "%s/%s", zkUA_getZkServQueuePath(), encodedServerUri);
+    snprintf(serverTaskPath, 65535, "%s/%s", zkUA_getQueuePath(), encodedServerUri);
     char *path_buffer = calloc(65535, sizeof(char));
     int path_buffer_len = 65535;
-    flags = ZOO_EPHEMERAL;
     fprintf(stderr, "init_ZUTH_Server: Pushing task path %s\n", serverTaskPath);
     rc = zoo_create(zh, serverTaskPath, " ", 3, &ZOO_OPEN_ACL_UNSAFE,
              flags, path_buffer, path_buffer_len);
-     if (rc!=ZOK) {
-         fprintf(stderr, "init_ZUTH_Server: Error %d for %s\n", rc, serverTaskPath);
-         intHandler(SIGINT);
+     if (rc!=ZOK && rc!=ZNODEEXISTS){
+        fprintf(stderr,
+                "init_ZUTH_Server: Error %d (node exists is %d) for %s  - Exiting\n",
+                rc, ZNODEEXISTS, serverTaskPath);
+        zkUA_error2String(rc);
+        intHandler(SIGINT);
      }
+     /* Pushing server is active EPH znode */
+     flags = 0;
+     flags |= ZOO_EPHEMERAL;
+     char *activePath = zkUA_getActivePath();
+     char *serverActivePath = calloc(65535, sizeof(char));
+     snprintf(serverActivePath, 65535, "%s/%s", activePath, encodedServerUri);
+     fprintf(stderr, "init_ZUTH_Server: Pushing server is active to zk: %s\n", serverActivePath);
+     rc = zoo_create(zh, serverActivePath, " ", 3, &ZOO_OPEN_ACL_UNSAFE,
+              flags, path_buffer, path_buffer_len); /* I don't care about path_buffer to memset it */
+      if (rc!=ZOK) {
+          fprintf(stderr, "init_ZUTH_Server: Error %d for %s - Exiting\n", rc, serverActivePath);
+          zkUA_error2String(rc);
+          intHandler(SIGINT);
+      }
+      free(activePath);
+      free(serverActivePath);
     /* Initialize the hashmap that holds the newest task's ID for each session ID*/
     zkUA_initializeTaskHashmap();
     /* initialize the server */
@@ -221,7 +236,6 @@ int main() {
     zh = zookeeper_init(zkUAConfigs.zooKeeperQuorum,
             zkUA_queueWatcher, 30000, &myid, 0, 0);
     zkHandle = zh;
-    fprintf(stderr, "cli_UA_server: initialized zkHandle\n");
     if (!zh) {
         return errno;
     }
