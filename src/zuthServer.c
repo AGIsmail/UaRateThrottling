@@ -133,7 +133,7 @@ static char *hexToByteArray(unsigned char *in, size_t sizeIn, size_t *sizeOut){ 
    for(count = 0; count < *sizeOut; count++) {
        sscanf(pos, "%2hhx", &data[count]);
        pos += 3;
-       if (*pos == '\0') break;
+//       if (*pos == '\0') break;
    }
 
    printf("0x");
@@ -141,9 +141,9 @@ static char *hexToByteArray(unsigned char *in, size_t sizeIn, size_t *sizeOut){ 
    for(count = 0; count < *sizeOut; count++){
        fprintf(stderr,"in: %c%c data: %02hhx \n", in[inCnt], in[inCnt+1], data[count]);
        inCnt+=3;
-       if (in[inCnt] == '\0') break;
+//       if (in[inCnt] == '\0') break;
    }
-   fprintf(stderr, "inCnt = %d count = %d", inCnt, count);
+   fprintf(stderr, "inCnt = %d count = %d\n", inCnt, count);
 
    return data;
 }

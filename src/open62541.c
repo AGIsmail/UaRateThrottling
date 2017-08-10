@@ -17000,6 +17000,7 @@ static void
 getServicePointers(UA_UInt32 requestTypeId, const UA_DataType **requestType,
                    const UA_DataType **responseType, UA_Service *service,
                    UA_Boolean *requiresSession) {
+    fprintf(stderr, "getServicePoints: requestTypeId %d", requestTypeId);
     switch(requestTypeId) {
     case UA_NS0ID_GETENDPOINTSREQUEST_ENCODING_DEFAULTBINARY:
         *service = (UA_Service)Service_GetEndpoints;
@@ -17313,8 +17314,10 @@ processMSG(UA_Server *server, UA_SecureChannel *channel,
     /* Decode the nodeid */
     UA_NodeId requestTypeId;
     UA_StatusCode retval = UA_NodeId_decodeBinary(msg, offset, &requestTypeId);
-    if(retval != UA_STATUSCODE_GOOD)
+    if(retval != UA_STATUSCODE_GOOD){
+        fprintf(stderr, "UA_NodeId_decodeBinary did not return with a good status\n");
         return;
+    }
     if(requestTypeId.identifierType != UA_NODEIDTYPE_NUMERIC)
         UA_NodeId_deleteMembers(&requestTypeId); /* leads to badserviceunsupported */
 
@@ -17337,7 +17340,10 @@ processMSG(UA_Server *server, UA_SecureChannel *channel,
             UA_LOG_INFO_CHANNEL(server->config.logger, channel,
                                 "Unknown request with type identifier %i",
                                 requestTypeId.identifier.numeric);
+            fprintf(stderr, "Unknown request with type identifier %i\n",
+                                requestTypeId.identifier.numeric);
         }
+        fprintf(stderr, "processMSG: sending error message back to the client\n");
         sendError(channel, msg, requestPos, &UA_TYPES[UA_TYPES_SERVICEFAULT],
                   requestId, UA_STATUSCODE_BADSERVICEUNSUPPORTED);
         return;
@@ -17479,6 +17485,7 @@ static void processERR(UA_Server *server, UA_Connection *connection, const UA_By
 
 void ZUTH_processMSG(UA_Server *server, UA_SecureChannel *channel,
            UA_UInt32 requestId, const UA_ByteString *msg) {
+    fprintf(stderr, "ZUTH_processMSG called \n");
     processMSG(server, channel, requestId, msg);
 }
 
