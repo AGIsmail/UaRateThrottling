@@ -8,6 +8,7 @@
 #include <zk_cli.h>
 #include <pthread.h>
 #include <zk_urlEncode.h>
+#include <jansson.h>
 /**
  * ZooKeeper libraries
  */
@@ -86,27 +87,134 @@ static int taskIdCmp(const void *tId1, const void *tId2){
     return 0;
 
 }
+
+//void ZUTH_jsonDecode_requestHeader(UA_RequestHeader *rr, char *stringRequest) {
+//    json_error_t error;
+//
+//    json_t *jsonRoot = json_loads(stringRequest, JSON_DISABLE_EOF_CHECK, &error);
+//    if(!jsonRoot){
+//        fprintf(stderr, "zuth_jsonDecode_requestHeader: couldn't load root object from jsonRoot\n"
+//                "error on line %d: %s", error.line, error.text);
+//        return;
+//    }
+//    json_t *requestId = json_object_get(jsonRoot, "requestId");
+//    json_t *reqHeader = json_object_get(jsonRoot, "Header");
+//    json_t *aToken = json_object_get(reqHeader, "authenticationToken");
+//    json_t *timestamp  = json_object_get(reqHeader, "timestamp");
+//    json_t *requestHandle = json_object_get(reqHeader, "requestHandle");
+//    json_t *returnDiagnostics = json_object_get(reqHeader, "returnDiagnostics");
+//    json_t *auditEntryId = json_object_get(reqHeader, "auditEntryId");
+//    json_t *timeoutHint = json_object_get(reqHeader, "timeoutHint");
+//    json_t *additionalHeader = json_object_get(reqHeader, "additionalHeader");
+//
+//    zkUA_jsonDecode_UA_NodeId(aToken, &rr->authenticationToken);
+//    rr->timestamp = json_integer_value(timestamp);
+//    rr->requestHandle = json_integer_value(requestHandle);
+//    rr->returnDiagnostics = json_integer_value(returnDiagnostics);
+//    rr->auditEntryId = zkUA_jsonDecode_UA_String(auditEntryId);
+//    rr->timeoutHint = json_integer_value(timeoutHint);
+//    zkUA_jsonDecode_UA_ExtensionObject(additionalHeader, &rr->additionalHeader);
+//
+//    UA_UInt32 reqId = json_integer_value(requestId);
+//
+//}
+
+#define CHAR_BIT 8
+
+/* Based on code from https://stackoverflow.com/questions/3408706/hexadecimal-string-to-byte-array-in-c#3409211 */
+static char *hexToByteArray(unsigned char *in, size_t sizeIn, size_t *sizeOut){ //, out, sizeOut){
+    int i=0;
+    const char *pos = in;
+    size_t count = sizeIn;
+
+    char *data = calloc(sizeIn, sizeof(char));
+    fprintf(stderr, "Converting hex to byte array: %s - ENDOF\n", in);
+    /* WARNING: no sanitization or error-checking whatsoever */
+   for(count = 0; count < *sizeOut; count++) {
+       sscanf(pos, "%2hhx", &data[count]);
+       pos += 3;
+       if (*pos == '\0') break;
+   }
+
+   printf("0x");
+   int inCnt = 0;
+   for(count = 0; count < *sizeOut; count++){
+       fprintf(stderr,"in: %c%c data: %02hhx \n", in[inCnt], in[inCnt+1], data[count]);
+       inCnt+=3;
+       if (in[inCnt] == '\0') break;
+   }
+   fprintf(stderr, "inCnt = %d count = %d", inCnt, count);
+
+   return data;
+}
+
+void zuth_executeRequest(char *stringRequest){
+
+    int buffer_len = 65535;
+    char *buffer = calloc(buffer_len, sizeof(char));
+    struct Stat stat;
+    zoo_get(zh, stringRequest, 0, buffer, &buffer_len, &stat);
+    json_error_t error;
+    json_t *jsonRoot = json_loads(buffer, JSON_DISABLE_EOF_CHECK, &error);
+    if (!jsonRoot) {
+        fprintf(stderr,
+                "zuth_executeRequest: Unable to load root object from retrieved JSON document - error: on line %d: %s \n stringRequest is %s\n",
+                error.line, error.text, stringRequest);
+        return;
+    }
+
+    json_t *string = json_object_get(jsonRoot, "dst");
+    if(!string){
+        fprintf(stderr, "zuth_executeRequest: Unable to load dst string\n");
+        return;
+    }
+    json_t *jOffset = json_object_get(jsonRoot, "offset");
+    size_t offset = json_integer_value(jOffset);
+    char *conv = json_string_value(string);
+    fprintf(stderr, "zuth_executeRequest: dst is %s\n", conv);
+
+    char * decodedString = hexToByteArray(conv, strlen(conv), &offset);
+
+    UA_ByteString *dst = UA_ByteString_new();
+    UA_ByteString_init(dst);
+    dst->length = offset;
+    dst->data = decodedString;
+    /* Decode the channelId */
+    json_t *jChannel = json_object_get(jsonRoot, "channelId");
+    /* Get the secureChannel of the client from the channelId */
+    UA_SecureChannel *channel = ZUTH_getSecureChannel(server, json_integer_value(jChannel));
+//    UA_SecureChannel *channel = UA_SecureChannelManager_get(server->secureChannelManager, json_integer_value(jChannel));
+
+    /* Decode the requestId */
+    json_t *jReqId = json_object_get(jsonRoot, "requestId");
+    UA_UInt32 requestId = json_integer_value(jReqId);
+    /* processMSG needs the channel. Do the channels have the same identifiers on both sides? */
+    ZUTH_processMSG(server, channel, requestId, dst);
+}
+
 void zuth_processTasks(int rc, const struct String_vector *strings, const void *data){
     if (rc!=ZOK){
         fprintf(stderr, "ZooKeeper error upon processing tasks\n");
         intHandler(SIGINT);
     }
     fprintf(stderr, "zuth_ProcessTasks: Processing Tasks from path %s..\n", data);
+
+    char *pathToTask = calloc(65535, sizeof(char));
     /* loop through all of the returned zk children */
      if (strings) {
          /* Sort array of returned children so that we add the nodes in ascending order of
           node IDs (assuming of course that a child will never have a smaller NodeId than a parent) */
          qsort(strings->data, strings->count, sizeof(char *), taskIdCmp);
          for (int i = 0; i < (strings->count); i++) {
+             memset(pathToTask, 0, 65535);
+             snprintf(pathToTask, 65535,"%s/%s", (char *) data, strings->data[i]);
              fprintf(stderr, "zuth_processTasks:\t%s\n",
-                                 strings->data[i]);
+                     pathToTask);
+             zuth_executeRequest(pathToTask);
          }
      }
 
-    /* Extract the task ID */
-    /* Get data of each task and execute it sequentially */
-//            zkUA_handleNewTasks(zzh, zkUA_zkServAddSpacePath(), server);
-//            zkUA_UA_Server_replicateZk(zzh, zkUA_zkServAddSpacePath(), server);
+    free(pathToTask);
     free(data);
 }
 static void zkUA_queueWatcher(zhandle_t *zzh, int type, int state,

@@ -18,6 +18,8 @@
 #ifndef OPEN62541_H_
 #define OPEN62541_H_
 
+#include <zookeeper.h>
+#include <jansson.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -45,7 +47,7 @@ extern "C" {
 /**
  * Options
  * ------- */
-#define UA_LOGLEVEL 300
+#define UA_LOGLEVEL 100
 //#define UA_LOGLEVEL 100
 #define UA_ENABLE_METHODCALLS
 #define UA_ENABLE_NODEMANAGEMENT
@@ -10719,8 +10721,22 @@ UA_UInt32 UA_EXPORT UA_getClientRequestHandle(UA_Client *client);
 UA_UInt32 UA_EXPORT UA_getClientRequestId(UA_Client *client);
 void UA_setClientRequestHandle(UA_Client *client, UA_UInt32 rHandle);
 void UA_setClientRequestId(UA_Client *client, UA_UInt32 rId);
+
+UA_StatusCode
+ZUTH_SecureChannel_sendBinaryMessage(UA_SecureChannel *channel, UA_UInt32 requestId,
+                                   const void *content, const UA_DataType *contentType, char *taskPath, zhandle_t *zh);
 void ZUTH_receiveUAClientServiceResponse(UA_Client *client, const void *request, const UA_DataType *requestType,
         void *response, const UA_DataType *responseType, int requestId);
+void
+__ZUTH_Client_Service(zhandle_t *zh, char *taskPath, UA_Client *client, const void *request, const UA_DataType *requestType,
+                    void *response, const UA_DataType *responseType);
+void ZUTH_processMSG(UA_Server *server, UA_SecureChannel *channel, UA_UInt32 requestId, const UA_ByteString *msg);
+
+UA_SecureChannel *ZUTH_getSecureChannel(UA_Server *server, UA_UInt32 channelId);
+
+//UA_SecureChannel *ZUTH_getSecureChannel(UA_Server *server, UA_UInt32 channelId){
+//    return UA_SecureChannelManager_get(server->secureChannelManager, channelId);
+//}
 /* End of zuthClientSend assistance */
 /* Create a new client
  *

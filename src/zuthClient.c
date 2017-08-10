@@ -107,13 +107,45 @@ static void init_UA_client(void* retval, zkUA_Config *zkUAConfigs) {
     char *taskPath = zkUA_encodeServerQueuePath(*endpointUrlUAString);
     UA_ReadValueId item;
     UA_ReadValueId_init(&item);
-    item.nodeId = UA_NODEID_NUMERIC(0,UA_NS0ID_SERVERSTATE);
-    item.attributeId = UA_ATTRIBUTEID_DISPLAYNAME;
+    item.nodeId = UA_NODEID_NUMERIC(0,UA_NS0ID_SERVER_SERVERSTATUS_CURRENTTIME);
+//    item.nodeId = UA_NODEID_NUMERIC(0,UA_NS0ID_SERVERSTATE_ENUMSTRINGS);
+    item.attributeId = UA_ATTRIBUTEID_VALUE;
     UA_ReadRequest request;
     UA_ReadRequest_init(&request);
     request.nodesToRead = &item;
     request.nodesToReadSize = 1;
+    fprintf(stderr, "init_UA_Client: calling ZUTH_Client_Service_read\n");
     UA_ReadResponse response = ZUTH_Client_Service_read(zh, taskPath, client, request);
+/*
+  typedef struct {
+    UA_ResponseHeader responseHeader;
+    size_t resultsSize;
+    UA_DataValue *results;
+    size_t diagnosticInfosSize;
+    UA_DiagnosticInfo *diagnosticInfos;
+} UA_ReadResponse;
+*/
+//
+//    typedef struct {
+//        UA_Boolean    hasValue             : 1;
+//        UA_Boolean    hasStatus            : 1;
+//        UA_Boolean    hasSourceTimestamp   : 1;
+//        UA_Boolean    hasServerTimestamp   : 1;
+//        UA_Boolean    hasSourcePicoseconds : 1;
+//        UA_Boolean    hasServerPicoseconds : 1;
+//        UA_Variant    value;
+//        UA_StatusCode status;
+//        UA_DateTime   sourceTimestamp;
+//        UA_UInt16     sourcePicoseconds;
+//        UA_DateTime   serverTimestamp;
+//        UA_UInt16     serverPicoseconds;
+//    } UA_DataValue;
+    if(response.responseHeader.serviceResult==UA_STATUSCODE_GOOD && UA_Variant_hasScalarType(&response.results->value, &UA_TYPES[UA_TYPES_DATETIME])){
+      UA_DateTime raw_date = *(UA_DateTime*) response.results->value.data;
+      UA_String string_date = UA_DateTime_toString(raw_date);
+      fprintf(stderr, "string date is %.*s\n", (int)string_date.length, string_date.data);
+      UA_String_deleteMembers(&string_date);
+    } else printf("no response!\n");
 //    fprintf(stderr, "zuthClient: taskPath is %s", taskPath);
 
     /* Disconnect and exit */

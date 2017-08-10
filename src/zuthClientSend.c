@@ -39,43 +39,60 @@ void ZUTH_jsonEncode_requestHeader(UA_RequestHeader *rr, json_t *reqHeader) {
 
 }
 
-void
-__ZUTH_Client_Service(zhandle_t *zh, const char *taskPath, UA_Client *client, const void *request, const UA_DataType *requestType,
-                    void *response, const UA_DataType *responseType) {
-    UA_init(response, responseType);
-    UA_ResponseHeader *respHeader = (UA_ResponseHeader*)response;
-
-    /* Make sure we have a valid session */
-    UA_StatusCode retval = UA_Client_manuallyRenewSecureChannel(client);
-    if(retval != UA_STATUSCODE_GOOD) {
-        respHeader->serviceResult = retval;
-        UA_setClientState(client, UA_CLIENTSTATE_ERRORED);
-        return;
-    }
-
-    /* Adjusting the request header. The const attribute is violated, but we
-     * only touch the following members: */
-    UA_RequestHeader *rr = (UA_RequestHeader*)(uintptr_t)request;
-    rr->authenticationToken = UA_getClientAuthToken(client); /* cleaned up at the end */
-
-    rr->timestamp = UA_DateTime_now();
-//    UA_UInt32 rHandle = UA_getClientRequestHandle(client);
-    rr->requestHandle = UA_getClientRequestHandle(client);
-    UA_setClientRequestHandle(client, rr->requestHandle + 1);
-    /* Encode the requestHeader */
-    json_t *rHeader = json_object();
-    ZUTH_jsonEncode_requestHeader(rr, rHeader);
-    UA_UInt32 requestId = UA_getClientRequestId(client);
-    UA_setClientRequestId(client, requestId+1);
-    json_t *jsonRequestId = json_integer(requestId);
-    json_t *jsonRequest = json_object();
-    json_object_set_new(jsonRequest, "Header", rHeader);
-    json_object_set_new(jsonRequest, "requestId", jsonRequestId);
+//void
+//__ZUTH_Client_Service(zhandle_t *zh, const char *taskPath, UA_Client *client, const void *request, const UA_DataType *requestType,
+//                    void *response, const UA_DataType *responseType) {
+//    UA_init(response, responseType);
+//    UA_ResponseHeader *respHeader = (UA_ResponseHeader*)response;
+//
+//    /* Make sure we have a valid session */
+//    UA_StatusCode retval = UA_Client_manuallyRenewSecureChannel(client);
+//    if(retval != UA_STATUSCODE_GOOD) {
+//        respHeader->serviceResult = retval;
+//        UA_setClientState(client, UA_CLIENTSTATE_ERRORED);
+//        return;
+//    }
+//
+//    /* Adjusting the request header. The const attribute is violated, but we
+//     * only touch the following members: */
+//    UA_RequestHeader *rr = (UA_RequestHeader*)(uintptr_t)request;
+//    rr->authenticationToken = UA_getClientAuthToken(client); /* cleaned up at the end */
+//
+//    rr->timestamp = UA_DateTime_now();
+//    UA_setClientRequestHandle(client, rr->requestHandle + 1);
+//    rr->requestHandle = UA_getClientRequestHandle(client);
+//
+//     /* Send the request */
+//    UA_UInt32 requestId = UA_getClientRequestId(client);
+//    UA_setClientRequestId(client, requestId + 1);
+//    requestId = UA_getClientRequestId(client);
+//     retval = ZUTH_SecureChannel_sendBinaryMessage(&client->channel, requestId, rr, requestType, taskPath, zh);
+//     if(retval != UA_STATUSCODE_GOOD) {
+//         if(retval == UA_STATUSCODE_BADENCODINGLIMITSEXCEEDED)
+//             respHeader->serviceResult = UA_STATUSCODE_BADREQUESTTOOLARGE;
+//         else
+//             respHeader->serviceResult = retval;
+//         client->state = UA_CLIENTSTATE_FAULTED;
+//         UA_NodeId_init(&rr->authenticationToken);
+//         return;
+//     }
+//    rr->requestHandle = UA_getClientRequestHandle(client);
+//    UA_setClientRequestHandle(client, rr->requestHandle + 1);
+//    /* Encode the requestHeader */
+//    json_t *rHeader = json_object();
+//    ZUTH_jsonEncode_requestHeader(rr, rHeader);
+//    UA_UInt32 requestId = UA_getClientRequestId(client);
+//    UA_setClientRequestId(client, requestId+1);
+//    json_t *jsonRequestId = json_integer(requestId);
+//    json_t *jsonRequest = json_object();
+//    json_object_set_new(jsonRequest, "Header", rHeader);
+//    json_object_set_new(jsonRequest, "requestId", jsonRequestId);
     /* Send the request to ZooKeeper*/
 //
 //    UA_LOG_DEBUG(client->config.logger, UA_LOGCATEGORY_CLIENT,
 //                 "Sending a request of type %i", requestType->typeId.identifier.numeric);
 //    char *queuePath = zkUA_encodeServerQueuePath(client->endpointUrl);
+/*
     char *s = json_dumps(jsonRequest, JSON_INDENT(1));
     char *path_buffer = calloc(65535, sizeof(char));
     int path_buffer_len = 65535;
@@ -89,10 +106,11 @@ __ZUTH_Client_Service(zhandle_t *zh, const char *taskPath, UA_Client *client, co
     }
     free(s);
     free(path_buffer);
+*/
 
-    /* Prepare the response and the structure we give into processServiceResponse */
-    ZUTH_receiveUAClientServiceResponse(client, request, requestType,
-            response, responseType, requestId);
-}
-
+//    /* Prepare the response and the structure we give into processServiceResponse */
+//    ZUTH_receiveUAClientServiceResponse(client, request, requestType,
+//            response, responseType, requestId);
+//}
+//
 

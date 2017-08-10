@@ -7141,6 +7141,8 @@ UA_encodeBinary(const void *src, const UA_DataType *type,
     pos = &dst->data[*offset];
     end = &dst->data[dst->length];
 
+//    fprintf(stderr, "%.*s\n", (int) dst->length, &dst->data[*offset]);
+
     /* Set the (thread-local) exchangeBufferCallbacks where the buffer is exchanged and the
        current chunk sent out */
     encodeBuf = dst;
@@ -7150,6 +7152,10 @@ UA_encodeBinary(const void *src, const UA_DataType *type,
     /* Encode and clean up */
     UA_StatusCode retval = UA_encodeBinaryInternal(src, type);
     *offset = (size_t)(pos - dst->data) / sizeof(UA_Byte);
+//    for (int i=0; i<80; i++){
+//        fprintf(stderr, "%02x", dst->data[i]);
+//    }
+//    fprintf(stderr, "\n");
     return retval;
 }
 
@@ -15236,6 +15242,7 @@ UA_SecureChannel_sendChunk(UA_ChunkInfo *ci, UA_ByteString *dst, size_t offset) 
 UA_StatusCode
 UA_SecureChannel_sendBinaryMessage(UA_SecureChannel *channel, UA_UInt32 requestId,
                                    const void *content, const UA_DataType *contentType) {
+    fprintf(stderr, "UA_SecureChannel_sendBinaryMessage called\n");
     UA_Connection *connection = channel->connection;
     if(!connection)
         return UA_STATUSCODE_BADINTERNALERROR;
@@ -17298,6 +17305,7 @@ processOPN(UA_Server *server, UA_Connection *connection,
 static void
 processMSG(UA_Server *server, UA_SecureChannel *channel,
            UA_UInt32 requestId, const UA_ByteString *msg) {
+
     /* At 0, the nodeid starts... */
     size_t ppos = 0;
     size_t *offset = &ppos;
@@ -17467,6 +17475,11 @@ static void processERR(UA_Server *server, UA_Connection *connection, const UA_By
     UA_LOG_ERROR(server->config.logger, UA_LOGCATEGORY_NETWORK,
                  "Client replied with an error message: %s %.*s",
                  UA_StatusCode_name(errorMessage.error), errorMessage.reason.length, errorMessage.reason.data);
+}
+
+void ZUTH_processMSG(UA_Server *server, UA_SecureChannel *channel,
+           UA_UInt32 requestId, const UA_ByteString *msg) {
+    processMSG(server, channel, requestId, msg);
 }
 
 /* Takes decoded messages starting at the nodeid of the content type. Only OPN
@@ -18726,6 +18739,10 @@ UA_SecureChannelManager_get(UA_SecureChannelManager *cm, UA_UInt32 channelId) {
             return &entry->channel;
     }
     return NULL;
+}
+
+UA_SecureChannel *ZUTH_getSecureChannel(UA_Server *server, UA_UInt32 channelId){
+    return UA_SecureChannelManager_get(&server->secureChannelManager, channelId);
 }
 
 UA_StatusCode
@@ -25375,6 +25392,7 @@ processServiceResponse(struct ResponseDescription *rd, UA_SecureChannel *channel
 void
 __UA_Client_Service(UA_Client *client, const void *request, const UA_DataType *requestType,
                     void *response, const UA_DataType *responseType) {
+    fprintf(stderr, "__UA_Client_Service: function called\n");
     UA_init(response, responseType);
     UA_ResponseHeader *respHeader = (UA_ResponseHeader*)response;
 
@@ -25443,6 +25461,205 @@ __UA_Client_Service(UA_Client *client, const void *request, const UA_DataType *r
     UA_NodeId_init(&rr->authenticationToken);
 }
 
+/*****************************/
+/* Send Binary Message to zk */
+/*****************************/
+char tskPath[65535];
+zhandle_t *zHandle;
+
+/* Source: https://stackoverflow.com/questions/6357031/how-do-you-convert-buffer-byte-array-to-hex-string-in-c#6357065 */
+void tohex(unsigned char * in, size_t insz, char * out, size_t outsz)
+{
+    unsigned char * pin = in;
+    const char * hex = "0123456789ABCDEF";
+    char * pout = out;
+    for(; pin < in+insz; pout +=3, pin++){
+        pout[0] = hex[(*pin>>4) & 0xF];
+        pout[1] = hex[ *pin     & 0xF];
+        pout[2] = ':';
+        if (pout + 3 - out > outsz){
+            /* Better to truncate output string than overflow buffer */
+            /* it would be still better to either return a status */
+            /* or ensure the target buffer is large enough and it never happen */
+            break;
+        }
+    }
+    pout[-1] = 0;
+}
+
+json_t *jsonEncode_UA_String(UA_String *uaString) {
+
+    char *buffer = (char *) calloc(65535, sizeof(char));
+    snprintf(buffer, 65535, "%.*s", (int) uaString->length, uaString->data);
+    json_t *jsonString = json_string(buffer);
+    free(buffer);
+    return jsonString;
+}
+
+static UA_StatusCode
+ZUTH_SecureChannel_sendChunk(UA_ChunkInfo *ci, UA_ByteString *dst, size_t offset) {
+    UA_SecureChannel *channel = ci->channel;
+    UA_Connection *connection = channel->connection;
+
+    if(!connection)
+       return UA_STATUSCODE_BADINTERNALERROR;
+
+    /* adjust the buffer where the header was hidden */
+    dst->data = &dst->data[-UA_SECURE_MESSAGE_HEADER_LENGTH];
+    dst->length += UA_SECURE_MESSAGE_HEADER_LENGTH;
+    offset += UA_SECURE_MESSAGE_HEADER_LENGTH;
+    if(ci->messageSizeSoFar + offset > connection->remoteConf.maxMessageSize &&
+       connection->remoteConf.maxMessageSize > 0)
+        ci->errorCode = UA_STATUSCODE_BADRESPONSETOOLARGE;
+    if(++ci->chunksSoFar > connection->remoteConf.maxChunkCount &&
+       connection->remoteConf.maxChunkCount > 0)
+        ci->errorCode = UA_STATUSCODE_BADRESPONSETOOLARGE;
+
+    /* Prepare the chunk headers */
+    UA_SecureConversationMessageHeader respHeader;
+    respHeader.secureChannelId = channel->securityToken.channelId;
+    respHeader.messageHeader.messageTypeAndChunkType = ci->messageType;
+    if(ci->errorCode == UA_STATUSCODE_GOOD) {
+        if(ci->final)
+            respHeader.messageHeader.messageTypeAndChunkType += UA_CHUNKTYPE_FINAL;
+        else
+            respHeader.messageHeader.messageTypeAndChunkType += UA_CHUNKTYPE_INTERMEDIATE;
+    } else {
+        /* abort message */
+        ci->final = true; /* mark as finished */
+        respHeader.messageHeader.messageTypeAndChunkType += UA_CHUNKTYPE_ABORT;
+        UA_String errorMsg;
+        UA_String_init(&errorMsg);
+        offset = UA_SECURE_MESSAGE_HEADER_LENGTH;
+        UA_UInt32_encodeBinary(&ci->errorCode, dst, &offset);
+        UA_String_encodeBinary(&errorMsg, dst, &offset);
+    }
+    respHeader.messageHeader.messageSize = (UA_UInt32)offset;
+    ci->messageSizeSoFar += offset;
+
+    /* Encode the header at the beginning of the buffer */
+    UA_SymmetricAlgorithmSecurityHeader symSecHeader;
+    symSecHeader.tokenId = channel->securityToken.tokenId;
+    UA_SequenceHeader seqHeader;
+    seqHeader.requestId = ci->requestId;
+    seqHeader.sequenceNumber = UA_atomic_add(&channel->sendSequenceNumber, 1);
+    size_t offset_header = 0;
+    UA_SecureConversationMessageHeader_encodeBinary(&respHeader, dst, &offset_header);
+    UA_SymmetricAlgorithmSecurityHeader_encodeBinary(&symSecHeader, dst, &offset_header);
+    UA_SequenceHeader_encodeBinary(&seqHeader, dst, &offset_header);
+
+    /* Send the chunk, the buffer is freed in the network layer */
+    dst->length = offset; /* set the buffer length to the content length */
+//    connection->send(channel->connection, dst);
+    fprintf(stderr, "ZUTH_SecureChannel_sendChunk: Sending chunk on SecureChannel %d\n", channel->securityToken.channelId);
+    /* Encode the security channel channel Id so that the server knows which client to respond to */
+    json_t *secureChannel = json_integer(channel->securityToken.channelId);
+    json_t *requestId = json_integer(ci->requestId);
+    /* Encode the request message itself */
+    char *buf = calloc(65535, sizeof(char));
+    tohex((unsigned char *) dst, offset, buf, 65535);
+    fprintf(stderr, "ZUTH_SecureChannel_sendChunk: buf: %s\n", buf);
+    json_t *jsonDst = json_string(buf);
+    free(buf);
+    /* Put the json objects in a single document */
+    json_t *jsonRequest = json_object();
+    json_object_set_new(jsonRequest, "channelId", secureChannel);
+    json_object_set_new(jsonRequest, "requestId", requestId);
+    json_object_set_new(jsonRequest, "dst", jsonDst);
+    json_object_set_new(jsonRequest, "offset", json_integer(offset));
+
+    char *s = json_dumps(jsonRequest, JSON_INDENT(1));
+    char *path_buffer = calloc(65535, sizeof(char));
+    int path_buffer_len = 65535;
+    int flags = ZOO_SEQUENCE;
+    int rc = zoo_create(zHandle, &tskPath[0], s, strlen(s), &ZOO_OPEN_ACL_UNSAFE, flags, path_buffer, path_buffer_len);
+    if(rc){
+        fprintf(stderr, "ZUTH_SecureChannel_sendChunk: Could not create a task with the path %s \n %s\n", path_buffer, s);
+    } else {
+        fprintf(stderr, "ZUTH_SecureChannel_sendChunk: Created a task with the path %s \n %s\n", path_buffer, s);
+    }
+    free(s);
+    free(path_buffer);
+
+    /* Replace with the buffer for the next chunk */
+    if(!ci->final) {
+        UA_StatusCode retval =
+            connection->getSendBuffer(connection, connection->localConf.sendBufferSize, dst);
+        if(retval != UA_STATUSCODE_GOOD)
+            return retval;
+        /* Forward the data pointer so that the payload is encoded after the message header.
+         * TODO: This works but is a bit too clever. Instead, we could return an offset to the
+         * binary encoding exchangeBuffer function. */
+        dst->data = &dst->data[UA_SECURE_MESSAGE_HEADER_LENGTH];
+        dst->length = connection->localConf.sendBufferSize - UA_SECURE_MESSAGE_HEADER_LENGTH;
+    }
+    return ci->errorCode;
+}
+
+UA_StatusCode
+ZUTH_SecureChannel_sendBinaryMessage(UA_SecureChannel *channel, UA_UInt32 requestId,
+                                   const void *content, const UA_DataType *contentType, char *taskPath, zhandle_t *zh) {
+
+    memset(&tskPath[0], 0, sizeof(char)*65535);
+    snprintf(&tskPath[0], 65535, "%s", taskPath);
+    zHandle = zh;
+
+    UA_Connection *connection = channel->connection;
+    if(!connection)
+        return UA_STATUSCODE_BADINTERNALERROR;
+
+    /* Allocate the message buffer */
+    UA_ByteString message;
+    UA_StatusCode retval =
+        connection->getSendBuffer(connection, connection->localConf.sendBufferSize, &message);
+    if(retval != UA_STATUSCODE_GOOD)
+        return retval;
+
+    /* Hide the message beginning where the header will be encoded */
+    message.data = &message.data[UA_SECURE_MESSAGE_HEADER_LENGTH];
+    message.length -= UA_SECURE_MESSAGE_HEADER_LENGTH;
+
+    /* Encode the message type */
+    size_t messagePos = 0;
+    UA_NodeId typeId = contentType->typeId; /* always numeric */
+    typeId.identifier.numeric = contentType->binaryEncodingId;
+    UA_NodeId_encodeBinary(&typeId, &message, &messagePos);
+
+    /* Encode with the chunking callback */
+    UA_ChunkInfo ci;
+    ci.channel = channel;
+    ci.requestId = requestId;
+    ci.chunksSoFar = 0;
+    ci.messageSizeSoFar = 0;
+    ci.final = false;
+    ci.messageType = UA_MESSAGETYPE_MSG;
+    ci.errorCode = UA_STATUSCODE_GOOD;
+    if(typeId.identifier.numeric == 446 || typeId.identifier.numeric == 449)
+        ci.messageType = UA_MESSAGETYPE_OPN;
+    else if(typeId.identifier.numeric == 452 || typeId.identifier.numeric == 455)
+        ci.messageType = UA_MESSAGETYPE_CLO;
+    retval = UA_encodeBinary(content, contentType,
+                             (UA_exchangeEncodeBuffer)ZUTH_SecureChannel_sendChunk,
+                             &ci, &message, &messagePos);
+
+    /* Encoding failed, release the message */
+    if(retval != UA_STATUSCODE_GOOD) {
+        if(!ci.final) {
+            /* the abort message was not send */
+            fprintf(stderr, "ZUTH_SecureChannel_sendBinaryMessage, abort message was not sent\n");
+            ci.errorCode = retval;
+            ZUTH_SecureChannel_sendChunk(&ci, &message, messagePos);
+        }
+        return retval;
+    }
+
+    /* Encoding finished, send the final chunk */
+    ci.final = UA_TRUE;
+    fprintf(stderr, "ZUTH_SecureChannel_sendBinaryMessage: Send the final chunk\n");
+    return ZUTH_SecureChannel_sendChunk(&ci, &message, messagePos);
+}
+
+
 void ZUTH_receiveUAClientServiceResponse(UA_Client *client, const void *request, const UA_DataType *requestType,
         void *response, const UA_DataType *responseType, int requestId){
 
@@ -25484,6 +25701,56 @@ void ZUTH_receiveUAClientServiceResponse(UA_Client *client, const void *request,
      /* Clean up the authentication token */
      UA_NodeId_init(&rr->authenticationToken);
  }
+
+void
+__ZUTH_Client_Service(zhandle_t *zh, char *taskPath, UA_Client *client, const void *request, const UA_DataType *requestType,
+                    void *response, const UA_DataType *responseType) {
+
+    fprintf(stderr, "__ZUTH_Client_Service(): Function called\n");
+
+    UA_init(response, responseType);
+    UA_ResponseHeader *respHeader = (UA_ResponseHeader*)response;
+
+    /* Make sure we have a valid session */
+    UA_StatusCode retval = UA_Client_manuallyRenewSecureChannel(client);
+    if(retval != UA_STATUSCODE_GOOD) {
+        respHeader->serviceResult = retval;
+        UA_setClientState(client, UA_CLIENTSTATE_ERRORED);
+        return;
+    }
+    /* Print Session ID */
+//    UA_LOG_DEBUG_CHANNEL(client->config.logger, client->connection.channel, "Session " UA_PRINTF_GUID_FORMAT " created",
+//                         UA_PRINTF_GUID_DATA(client->connection.channel->sessions.lh_first->session->sessionId.identifier.guid));
+//    fprintf(stderr, "Session " UA_PRINTF_GUID_FORMAT " created\n",  UA_PRINTF_GUID_DATA(client->connection.channel->sessions.lh_first->session->sessionId.identifier.guid));
+    /* Adjusting the request header. The const attribute is violated, but we
+     * only touch the following members: */
+
+    UA_RequestHeader *rr = (UA_RequestHeader*)(uintptr_t)request;
+    rr->authenticationToken = UA_getClientAuthToken(client); /* cleaned up at the end */
+
+    rr->timestamp = UA_DateTime_now();
+
+    rr->requestHandle = ++client->requestHandle;
+
+     /* Send the request */
+    UA_UInt32 requestId = ++client->requestId;
+     retval = ZUTH_SecureChannel_sendBinaryMessage(&client->channel, requestId, rr, requestType, taskPath, zh);
+     if(retval != UA_STATUSCODE_GOOD) {
+         if(retval == UA_STATUSCODE_BADENCODINGLIMITSEXCEEDED)
+             respHeader->serviceResult = UA_STATUSCODE_BADREQUESTTOOLARGE;
+         else
+             respHeader->serviceResult = retval;
+         client->state = UA_CLIENTSTATE_FAULTED;
+         UA_NodeId_init(&rr->authenticationToken);
+         return;
+     }
+
+     /* Prepare the response and the structure we give into processServiceResponse */
+     ZUTH_receiveUAClientServiceResponse(client, request, requestType,
+             response, responseType, requestId);
+ }
+
+
 /*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/src/client/ua_client_highlevel.c" ***********************************/
 
 /* This Source Code Form is subject to the terms of the Mozilla Public
