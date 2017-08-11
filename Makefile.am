@@ -6,11 +6,10 @@ AM_CXXFLAGS = -Wall $(USEIPV6)
 LIB_LDFLAGS = -no-undefined
 
 ZUTH_SRC = include/open62541.h src/open62541.c \
-     include/zk_cli.h src/zk_cli.c include/nodeset.h src/nodeset.c \
-     include/zk_global.h include/zk_urlEncode.h src/zk_urlEncode.c \
-     include/zk_jsonEncode.h src/zk_jsonEncode.c \
-     include/zk_jsonDecode.h src/zk_jsonDecode.c \
-     include/zuthClientSend.h src/zuthClientSend.c
+	include/zk_cli.h src/zk_cli.c include/nodeset.h src/nodeset.c \
+	include/zk_global.h include/zk_urlEncode.h src/zk_urlEncode.c \
+	include/zuthClientSend.h src/zuthClientSend.c
+
 
 HASHTABLE_SRC = src/hashtable/hashtable_itr.h src/hashtable/hashtable_itr.c \
     src/hashtable/hashtable_private.h src/hashtable/hashtable.h src/hashtable/hashtable.c
