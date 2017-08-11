@@ -8,7 +8,7 @@ LIB_LDFLAGS = -no-undefined
 ZUTH_SRC = include/open62541.h src/open62541.c \
 	include/zk_cli.h src/zk_cli.c include/nodeset.h src/nodeset.c \
 	include/zk_global.h include/zk_urlEncode.h src/zk_urlEncode.c \
-	include/zuthClientSend.h src/zuthClientSend.c
+	include/zuthClientSend.h
 
 
 HASHTABLE_SRC = src/hashtable/hashtable_itr.h src/hashtable/hashtable_itr.c \

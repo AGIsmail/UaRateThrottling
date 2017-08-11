@@ -121,11 +121,13 @@ static char *hexToByteArray(unsigned char *in, size_t sizeIn, size_t *sizeOut){ 
 
 void zuth_executeRequest(char *stringRequest){
 
+    int rc = 0;
+
     /* Get the task's data */
     int buffer_len = 65535;
     char *buffer = calloc(buffer_len, sizeof(char));
     struct Stat stat;
-    zoo_get(zh, stringRequest, 0, (char *) buffer, &buffer_len, &stat);
+    rc = zoo_get(zh, stringRequest, 0, (char *) buffer, &buffer_len, &stat);
     /* Lood the root json object */
     json_error_t error;
     json_t *jsonRoot = json_loads(buffer, JSON_DISABLE_EOF_CHECK, &error);
@@ -162,9 +164,14 @@ void zuth_executeRequest(char *stringRequest){
     json_t *jReqId = json_object_get(jsonRoot, "requestId");
     UA_UInt32 requestId = json_integer_value(jReqId);
     /* process the message */
-//    ZUTH_processMSG(server, channel, requestId, dst);
     UA_SecureChannel_processChunks(channel, dst,
          (void*)UA_Server_processSecureChannelMessage, server);
+    /* Delete the task on zk */
+    rc = zoo_delete(zh, stringRequest,-1);
+    if(rc){
+        fprintf(stderr,"zoo_delete of task failed: %s", stringRequest);
+        zkUA_error2String(rc);
+    }
 }
 
 void zuth_processTasks(int rc, const struct String_vector *strings, const void *data){

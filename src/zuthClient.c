@@ -7,6 +7,7 @@
 #include <nodeset.h>
 #include <zk_cli.h>
 #include <zk_global.h>
+#include <zuthClientSend.h>
 /**
  * ZooKeeper libraries
  */
