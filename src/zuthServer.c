@@ -89,36 +89,6 @@ static int taskIdCmp(const void *tId1, const void *tId2){
 
 }
 
-
-#define CHAR_BIT 8
-
-/* Based on code from https://stackoverflow.com/questions/3408706/hexadecimal-string-to-byte-array-in-c#3409211 */
-static char *hexToByteArray(unsigned char *in, size_t sizeIn, size_t *sizeOut){ //, out, sizeOut){
-    int i=0;
-    const char *pos = in;
-    size_t count = sizeIn;
-
-    char *data = calloc(sizeIn, sizeof(char));
-    fprintf(stderr, "Converting hex to byte array: %s - ENDOF\n", in);
-    /* WARNING: no sanitization or error-checking whatsoever */
-   for(count = 0; count < *sizeOut; count++) {
-       sscanf(pos, "%2hhx", &data[count]);
-       pos += 3;
-//       if (*pos == '\0') break;
-   }
-
-   printf("0x");
-   int inCnt = 0;
-   for(count = 0; count < *sizeOut; count++){
-       fprintf(stderr,"in: %c%c data: %02hhx \n", in[inCnt], in[inCnt+1], data[count]);
-       inCnt+=3;
-//       if (in[inCnt] == '\0') break;
-   }
-   fprintf(stderr, "inCnt = %d count = %d\n", inCnt, count);
-
-   return data;
-}
-
 void zuth_executeRequest(char *stringRequest){
 
     int rc = 0;

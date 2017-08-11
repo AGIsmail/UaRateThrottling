@@ -25477,38 +25477,6 @@ __UA_Client_Service(UA_Client *client, const void *request, const UA_DataType *r
 char tskPath[65535];
 zhandle_t *zHandle;
 
-/* Source: https://stackoverflow.com/questions/6357031/how-do-you-convert-buffer-byte-array-to-hex-string-in-c#6357065 */
-void tohex(unsigned char * in, size_t insz, char * out, size_t outsz)
-{
-    unsigned char * pin = in;
-    const char * hex = "0123456789ABCDEF";
-    char * pout = out;
-    fprintf(stderr, "tohex: ");
-    for(; pin < in+insz; pout +=3, pin++){
-        fprintf(stderr, "%02hhx:", (unsigned int) *pin);
-        pout[0] = hex[(*pin>>4) & 0xF];
-        pout[1] = hex[ *pin     & 0xF];
-        pout[2] = ':';
-        if (pout + 3 - out > outsz){
-            /* Better to truncate output string than overflow buffer */
-            /* it would be still better to either return a status */
-            /* or ensure the target buffer is large enough and it never happen */
-            break;
-        }
-    }
-    fprintf(stderr, "\n");
-    pout[-1] = 0;
-}
-
-json_t *jsonEncode_UA_String(UA_String *uaString) {
-
-    char *buffer = (char *) calloc(65535, sizeof(char));
-    snprintf(buffer, 65535, "%.*s", (int) uaString->length, uaString->data);
-    json_t *jsonString = json_string(buffer);
-    free(buffer);
-    return jsonString;
-}
-
 static UA_StatusCode
 ZUTH_SecureChannel_sendChunk(UA_ChunkInfo *ci, UA_ByteString *dst, size_t offset) {
     UA_SecureChannel *channel = ci->channel;
