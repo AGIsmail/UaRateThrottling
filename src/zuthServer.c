@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <zk_urlEncode.h>
 #include <jansson.h>
+#include <glib.h>
 /**
  * ZooKeeper libraries
  */
@@ -88,36 +89,6 @@ static int taskIdCmp(const void *tId1, const void *tId2){
 
 }
 
-//void ZUTH_jsonDecode_requestHeader(UA_RequestHeader *rr, char *stringRequest) {
-//    json_error_t error;
-//
-//    json_t *jsonRoot = json_loads(stringRequest, JSON_DISABLE_EOF_CHECK, &error);
-//    if(!jsonRoot){
-//        fprintf(stderr, "zuth_jsonDecode_requestHeader: couldn't load root object from jsonRoot\n"
-//                "error on line %d: %s", error.line, error.text);
-//        return;
-//    }
-//    json_t *requestId = json_object_get(jsonRoot, "requestId");
-//    json_t *reqHeader = json_object_get(jsonRoot, "Header");
-//    json_t *aToken = json_object_get(reqHeader, "authenticationToken");
-//    json_t *timestamp  = json_object_get(reqHeader, "timestamp");
-//    json_t *requestHandle = json_object_get(reqHeader, "requestHandle");
-//    json_t *returnDiagnostics = json_object_get(reqHeader, "returnDiagnostics");
-//    json_t *auditEntryId = json_object_get(reqHeader, "auditEntryId");
-//    json_t *timeoutHint = json_object_get(reqHeader, "timeoutHint");
-//    json_t *additionalHeader = json_object_get(reqHeader, "additionalHeader");
-//
-//    zkUA_jsonDecode_UA_NodeId(aToken, &rr->authenticationToken);
-//    rr->timestamp = json_integer_value(timestamp);
-//    rr->requestHandle = json_integer_value(requestHandle);
-//    rr->returnDiagnostics = json_integer_value(returnDiagnostics);
-//    rr->auditEntryId = zkUA_jsonDecode_UA_String(auditEntryId);
-//    rr->timeoutHint = json_integer_value(timeoutHint);
-//    zkUA_jsonDecode_UA_ExtensionObject(additionalHeader, &rr->additionalHeader);
-//
-//    UA_UInt32 reqId = json_integer_value(requestId);
-//
-//}
 
 #define CHAR_BIT 8
 
@@ -150,10 +121,12 @@ static char *hexToByteArray(unsigned char *in, size_t sizeIn, size_t *sizeOut){ 
 
 void zuth_executeRequest(char *stringRequest){
 
+    /* Get the task's data */
     int buffer_len = 65535;
     char *buffer = calloc(buffer_len, sizeof(char));
     struct Stat stat;
-    zoo_get(zh, stringRequest, 0, buffer, &buffer_len, &stat);
+    zoo_get(zh, stringRequest, 0, (char *) buffer, &buffer_len, &stat);
+    /* Lood the root json object */
     json_error_t error;
     json_t *jsonRoot = json_loads(buffer, JSON_DISABLE_EOF_CHECK, &error);
     if (!jsonRoot) {
@@ -162,34 +135,36 @@ void zuth_executeRequest(char *stringRequest){
                 error.line, error.text, stringRequest);
         return;
     }
-
-    json_t *string = json_object_get(jsonRoot, "dst");
-    if(!string){
+    /* Get the length of the ByteArray */
+    json_t *jOffset = json_object_get(jsonRoot, "offset");
+    size_t offset = json_integer_value(jOffset);
+    /* Get the base64 encoded UA_ByteArray (encodedBinary) string */
+    json_t *jString = json_object_get(jsonRoot, "dst");
+    if(!jString){
         fprintf(stderr, "zuth_executeRequest: Unable to load dst string\n");
         return;
     }
-    json_t *jOffset = json_object_get(jsonRoot, "offset");
-    size_t offset = json_integer_value(jOffset);
-    char *conv = json_string_value(string);
+    /* Convert the ByteArray from a JSON object to a string */
+    char *conv = json_string_value(jString);
     fprintf(stderr, "zuth_executeRequest: dst is %s\n", conv);
-
-    char * decodedString = hexToByteArray(conv, strlen(conv), &offset);
-
+    /* Convert the ByteArray from a base64 encoded string into UA_ByteArray (unsigned char) */
     UA_ByteString *dst = UA_ByteString_new();
     UA_ByteString_init(dst);
     dst->length = offset;
-    dst->data = decodedString;
+    dst->data = g_base64_decode((const char *) conv, &dst->length);
+    fprintf(stderr, "zuth_executeRequest: %.*s\n", (int) dst->length, dst->data);
     /* Decode the channelId */
     json_t *jChannel = json_object_get(jsonRoot, "channelId");
     /* Get the secureChannel of the client from the channelId */
-    UA_SecureChannel *channel = ZUTH_getSecureChannel(server, json_integer_value(jChannel));
-//    UA_SecureChannel *channel = UA_SecureChannelManager_get(server->secureChannelManager, json_integer_value(jChannel));
-
+    UA_SecureChannel *channel = ZUTH_getSecureChannel(server,
+            json_integer_value(jChannel));
     /* Decode the requestId */
     json_t *jReqId = json_object_get(jsonRoot, "requestId");
     UA_UInt32 requestId = json_integer_value(jReqId);
-    /* processMSG needs the channel. Do the channels have the same identifiers on both sides? */
-    ZUTH_processMSG(server, channel, requestId, dst);
+    /* process the message */
+//    ZUTH_processMSG(server, channel, requestId, dst);
+    UA_SecureChannel_processChunks(channel, dst,
+         (void*)UA_Server_processSecureChannelMessage, server);
 }
 
 void zuth_processTasks(int rc, const struct String_vector *strings, const void *data){

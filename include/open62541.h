@@ -10714,6 +10714,15 @@ typedef enum {
 struct UA_Client;
 typedef struct UA_Client UA_Client;
 /* Functions included to assist with zuthClientSend.c and .h */
+typedef enum {
+    UA_MESSAGETYPE_ACK = 0x4B4341,
+    UA_MESSAGETYPE_HEL = 0x4C4548,
+    UA_MESSAGETYPE_MSG = 0x47534D,
+    UA_MESSAGETYPE_OPN = 0x4E504F,
+    UA_MESSAGETYPE_CLO = 0x4F4C43,
+    UA_MESSAGETYPE_ERR = 0x525245
+} UA_MessageType;
+
 UA_String UA_EXPORT *UA_getClientEndpointUrl(UA_Client *client);
 void UA_EXPORT UA_setClientState(UA_Client *client, int state);
 UA_NodeId UA_EXPORT UA_getClientAuthToken(UA_Client *client);
@@ -10723,16 +10732,25 @@ void UA_setClientRequestHandle(UA_Client *client, UA_UInt32 rHandle);
 void UA_setClientRequestId(UA_Client *client, UA_UInt32 rId);
 
 UA_StatusCode
-ZUTH_SecureChannel_sendBinaryMessage(UA_SecureChannel *channel, UA_UInt32 requestId,
-                                   const void *content, const UA_DataType *contentType, char *taskPath, zhandle_t *zh);
-void ZUTH_receiveUAClientServiceResponse(UA_Client *client, const void *request, const UA_DataType *requestType,
-        void *response, const UA_DataType *responseType, int requestId);
+ZUTH_SecureChannel_sendBinaryMessage(UA_SecureChannel *channel,
+        UA_UInt32 requestId, const void *content,
+        const UA_DataType *contentType, char *taskPath, zhandle_t *zh);
+void ZUTH_receiveUAClientServiceResponse(UA_Client *client, const void *request,
+        const UA_DataType *requestType, void *response,
+        const UA_DataType *responseType, int requestId);
 void
-__ZUTH_Client_Service(zhandle_t *zh, char *taskPath, UA_Client *client, const void *request, const UA_DataType *requestType,
-                    void *response, const UA_DataType *responseType);
-void ZUTH_processMSG(UA_Server *server, UA_SecureChannel *channel, UA_UInt32 requestId, const UA_ByteString *msg);
+__ZUTH_Client_Service(zhandle_t *zh, char *taskPath, UA_Client *client,
+        const void *request, const UA_DataType *requestType, void *response,
+        const UA_DataType *responseType);
+void
+UA_Server_processSecureChannelMessage(UA_Server *server,
+        UA_SecureChannel *channel, UA_MessageType messagetype,
+        UA_UInt32 requestId, const UA_ByteString *message);
+void ZUTH_processMSG(UA_Server *server, UA_SecureChannel *channel,
+        UA_UInt32 requestId, const UA_ByteString *msg);
 
 UA_SecureChannel *ZUTH_getSecureChannel(UA_Server *server, UA_UInt32 channelId);
+
 
 //UA_SecureChannel *ZUTH_getSecureChannel(UA_Server *server, UA_UInt32 channelId){
 //    return UA_SecureChannelManager_get(server->secureChannelManager, channelId);

@@ -20,6 +20,7 @@
 #endif
 
 #include "open62541.h"
+#include <glib.h>
 
 /*********************************** amalgamated original file "/home/slint/Documents/Code/Developing_OPCUA/open62541-amalgamated/deps/queue.h" ***********************************/
 
@@ -2552,14 +2553,14 @@ typedef struct {
  * MessageType
  * ^^^^^^^^^^^
  * Message Type and whether the message contains an intermediate chunk */
-typedef enum {
-    UA_MESSAGETYPE_ACK = 0x4B4341,
-    UA_MESSAGETYPE_HEL = 0x4C4548,
-    UA_MESSAGETYPE_MSG = 0x47534D,
-    UA_MESSAGETYPE_OPN = 0x4E504F,
-    UA_MESSAGETYPE_CLO = 0x4F4C43,
-    UA_MESSAGETYPE_ERR = 0x525245
-} UA_MessageType;
+//typedef enum {
+//    UA_MESSAGETYPE_ACK = 0x4B4341,
+//    UA_MESSAGETYPE_HEL = 0x4C4548,
+//    UA_MESSAGETYPE_MSG = 0x47534D,
+//    UA_MESSAGETYPE_OPN = 0x4E504F,
+//    UA_MESSAGETYPE_CLO = 0x4F4C43,
+//    UA_MESSAGETYPE_ERR = 0x525245
+//} UA_MessageType;
 
 #define UA_TRANSPORT_MESSAGETYPE 4
 
@@ -7152,10 +7153,10 @@ UA_encodeBinary(const void *src, const UA_DataType *type,
     /* Encode and clean up */
     UA_StatusCode retval = UA_encodeBinaryInternal(src, type);
     *offset = (size_t)(pos - dst->data) / sizeof(UA_Byte);
-//    for (int i=0; i<80; i++){
-//        fprintf(stderr, "%02x", dst->data[i]);
-//    }
-//    fprintf(stderr, "\n");
+    for (size_t i=0; i<*offset; i++){
+        fprintf(stderr, "%02hhx:", dst->data[i]);
+    }
+    fprintf(stderr, "\n");
     return retval;
 }
 
@@ -17313,6 +17314,7 @@ processMSG(UA_Server *server, UA_SecureChannel *channel,
 
     /* Decode the nodeid */
     UA_NodeId requestTypeId;
+    fprintf(stderr, "%.*s\n", (int) msg->length, msg->data);
     UA_StatusCode retval = UA_NodeId_decodeBinary(msg, offset, &requestTypeId);
     if(retval != UA_STATUSCODE_GOOD){
         fprintf(stderr, "UA_NodeId_decodeBinary did not return with a good status\n");
@@ -17492,7 +17494,8 @@ void ZUTH_processMSG(UA_Server *server, UA_SecureChannel *channel,
 /* Takes decoded messages starting at the nodeid of the content type. Only OPN
  * messages start at the asymmetricalgorithmsecurityheader and are not
  * decoded. */
-static void
+//static void
+void
 UA_Server_processSecureChannelMessage(UA_Server *server, UA_SecureChannel *channel,
                                       UA_MessageType messagetype, UA_UInt32 requestId,
                                       const UA_ByteString *message) {
@@ -25480,7 +25483,9 @@ void tohex(unsigned char * in, size_t insz, char * out, size_t outsz)
     unsigned char * pin = in;
     const char * hex = "0123456789ABCDEF";
     char * pout = out;
+    fprintf(stderr, "tohex: ");
     for(; pin < in+insz; pout +=3, pin++){
+        fprintf(stderr, "%02hhx:", (unsigned int) *pin);
         pout[0] = hex[(*pin>>4) & 0xF];
         pout[1] = hex[ *pin     & 0xF];
         pout[2] = ':';
@@ -25491,6 +25496,7 @@ void tohex(unsigned char * in, size_t insz, char * out, size_t outsz)
             break;
         }
     }
+    fprintf(stderr, "\n");
     pout[-1] = 0;
 }
 
@@ -25558,16 +25564,15 @@ ZUTH_SecureChannel_sendChunk(UA_ChunkInfo *ci, UA_ByteString *dst, size_t offset
     /* Send the chunk, the buffer is freed in the network layer */
     dst->length = offset; /* set the buffer length to the content length */
 //    connection->send(channel->connection, dst);
-    fprintf(stderr, "ZUTH_SecureChannel_sendChunk: Sending chunk on SecureChannel %d\n", channel->securityToken.channelId);
+
+    fprintf(stderr, "ZUTH_SecureChannel_sendChunk: Sending chunk on SecureChannel %d - dst->length %lu offset %lu\n", channel->securityToken.channelId, dst->length, offset);
     /* Encode the security channel channel Id so that the server knows which client to respond to */
     json_t *secureChannel = json_integer(channel->securityToken.channelId);
     json_t *requestId = json_integer(ci->requestId);
     /* Encode the request message itself */
-    char *buf = calloc(65535, sizeof(char));
-    tohex((unsigned char *) dst, offset, buf, 65535);
-    fprintf(stderr, "ZUTH_SecureChannel_sendChunk: buf: %s\n", buf);
-    json_t *jsonDst = json_string(buf);
-    free(buf);
+    char * encodedString = g_base64_encode(dst->data, dst->length);
+    json_t *jsonDst = json_string(encodedString);
+
     /* Put the json objects in a single document */
     json_t *jsonRequest = json_object();
     json_object_set_new(jsonRequest, "channelId", secureChannel);
@@ -25587,6 +25592,7 @@ ZUTH_SecureChannel_sendChunk(UA_ChunkInfo *ci, UA_ByteString *dst, size_t offset
     }
     free(s);
     free(path_buffer);
+    g_free(encodedString);
 
     /* Replace with the buffer for the next chunk */
     if(!ci->final) {
