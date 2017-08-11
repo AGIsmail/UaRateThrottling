@@ -94,10 +94,7 @@ static void init_UA_client(void* retval, zkUA_Config *zkUAConfigs) {
     char *groupGuid = calloc(65535, sizeof(char));
     snprintf(groupGuid, 65535, UA_PRINTF_GUID_FORMAT,
             UA_PRINTF_GUID_DATA(zkUAConfigs->guid));
-    /* Run service calls through zookeeper task assignment */
-//    zkUA_UAServerAddressSpace(zh, client, serverDst, groupGuid);
-    /* Use the raw read attribute to submit a task */
-
+    /* Use the raw readAttribute service to submit a task to zk */
     UA_String *endpointUrlUAString = UA_getClientEndpointUrl(client);
     /* Initialize the global variable with the server redundancy group
      * task queue path */
@@ -105,25 +102,31 @@ static void init_UA_client(void* retval, zkUA_Config *zkUAConfigs) {
     zkUA_setQueuePath();
     /* Encode the tasks path for the specific endpoint */
     char *taskPath = zkUA_encodeServerQueuePath(*endpointUrlUAString);
+
     UA_ReadValueId item;
     UA_ReadValueId_init(&item);
     item.nodeId = UA_NODEID_NUMERIC(0,UA_NS0ID_SERVER_SERVERSTATUS_CURRENTTIME);
-//    item.nodeId = UA_NODEID_NUMERIC(0,UA_NS0ID_SERVERSTATE_ENUMSTRINGS);
     item.attributeId = UA_ATTRIBUTEID_VALUE;
+    int n=0;
     UA_ReadRequest request;
     UA_ReadRequest_init(&request);
     request.nodesToRead = &item;
     request.nodesToReadSize = 1;
+    UA_ReadResponse response;
+    while (n<100){
     fprintf(stderr, "init_UA_Client: calling ZUTH_Client_Service_read\n");
-    UA_ReadResponse response = ZUTH_Client_Service_read(zh, taskPath, client, request);
+    response = ZUTH_Client_Service_read(zh, taskPath, client, request);
 
 //    if(response.responseHeader.serviceResult==UA_STATUSCODE_GOOD && UA_Variant_hasScalarType(&response.results->value, &UA_TYPES[UA_TYPES_DATETIME])){
       UA_DateTime raw_date = *(UA_DateTime*) response.results->value.data;
       UA_String string_date = UA_DateTime_toString(raw_date);
-      fprintf(stderr, "string date is %.*s\n", (int)string_date.length, string_date.data);
+      fprintf(stderr, "init_UA_Client: string date is %.*s\n", (int)string_date.length, string_date.data);
       UA_String_deleteMembers(&string_date);
 //    } else printf("no response!\n");
-
+      n++;
+    }
+    //UA_ReadRequest_delete(&request);
+    //UA_ReadResponse_delete(&response);
 
     /* Disconnect and exit */
     UA_Client_disconnect(client);

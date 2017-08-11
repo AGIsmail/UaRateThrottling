@@ -47,7 +47,7 @@ extern "C" {
 /**
  * Options
  * ------- */
-#define UA_LOGLEVEL 100
+#define UA_LOGLEVEL 300
 //#define UA_LOGLEVEL 100
 #define UA_ENABLE_METHODCALLS
 #define UA_ENABLE_NODEMANAGEMENT

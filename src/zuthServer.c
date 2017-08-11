@@ -93,6 +93,11 @@ void zuth_executeRequest(char *stringRequest){
 
     int rc = 0;
 
+    /* Check that this task is not already in the local queue */
+    /* If it is already in the queues hashtable, return */
+    /* If it is not in the queues hashtable add it and process the task */
+
+
     /* Get the task's data */
     int buffer_len = 65535;
     char *buffer = calloc(buffer_len, sizeof(char));
@@ -118,13 +123,11 @@ void zuth_executeRequest(char *stringRequest){
     }
     /* Convert the ByteArray from a JSON object to a string */
     char *conv = json_string_value(jString);
-    fprintf(stderr, "zuth_executeRequest: dst is %s\n", conv);
     /* Convert the ByteArray from a base64 encoded string into UA_ByteArray (unsigned char) */
     UA_ByteString *dst = UA_ByteString_new();
     UA_ByteString_init(dst);
     dst->length = offset;
     dst->data = g_base64_decode((const char *) conv, &dst->length);
-    fprintf(stderr, "zuth_executeRequest: %.*s\n", (int) dst->length, dst->data);
     /* Decode the channelId */
     json_t *jChannel = json_object_get(jsonRoot, "channelId");
     /* Get the secureChannel of the client from the channelId */

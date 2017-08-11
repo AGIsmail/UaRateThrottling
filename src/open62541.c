@@ -7142,8 +7142,6 @@ UA_encodeBinary(const void *src, const UA_DataType *type,
     pos = &dst->data[*offset];
     end = &dst->data[dst->length];
 
-//    fprintf(stderr, "%.*s\n", (int) dst->length, &dst->data[*offset]);
-
     /* Set the (thread-local) exchangeBufferCallbacks where the buffer is exchanged and the
        current chunk sent out */
     encodeBuf = dst;
@@ -7153,10 +7151,6 @@ UA_encodeBinary(const void *src, const UA_DataType *type,
     /* Encode and clean up */
     UA_StatusCode retval = UA_encodeBinaryInternal(src, type);
     *offset = (size_t)(pos - dst->data) / sizeof(UA_Byte);
-    for (size_t i=0; i<*offset; i++){
-        fprintf(stderr, "%02hhx:", dst->data[i]);
-    }
-    fprintf(stderr, "\n");
     return retval;
 }
 
@@ -15243,7 +15237,6 @@ UA_SecureChannel_sendChunk(UA_ChunkInfo *ci, UA_ByteString *dst, size_t offset) 
 UA_StatusCode
 UA_SecureChannel_sendBinaryMessage(UA_SecureChannel *channel, UA_UInt32 requestId,
                                    const void *content, const UA_DataType *contentType) {
-    fprintf(stderr, "UA_SecureChannel_sendBinaryMessage called\n");
     UA_Connection *connection = channel->connection;
     if(!connection)
         return UA_STATUSCODE_BADINTERNALERROR;
@@ -17001,7 +16994,6 @@ static void
 getServicePointers(UA_UInt32 requestTypeId, const UA_DataType **requestType,
                    const UA_DataType **responseType, UA_Service *service,
                    UA_Boolean *requiresSession) {
-    fprintf(stderr, "getServicePoints: requestTypeId %d", requestTypeId);
     switch(requestTypeId) {
     case UA_NS0ID_GETENDPOINTSREQUEST_ENCODING_DEFAULTBINARY:
         *service = (UA_Service)Service_GetEndpoints;
@@ -17487,7 +17479,6 @@ static void processERR(UA_Server *server, UA_Connection *connection, const UA_By
 
 void ZUTH_processMSG(UA_Server *server, UA_SecureChannel *channel,
            UA_UInt32 requestId, const UA_ByteString *msg) {
-    fprintf(stderr, "ZUTH_processMSG called \n");
     processMSG(server, channel, requestId, msg);
 }
 
@@ -25402,7 +25393,6 @@ processServiceResponse(struct ResponseDescription *rd, UA_SecureChannel *channel
 void
 __UA_Client_Service(UA_Client *client, const void *request, const UA_DataType *requestType,
                     void *response, const UA_DataType *responseType) {
-    fprintf(stderr, "__UA_Client_Service: function called\n");
     UA_init(response, responseType);
     UA_ResponseHeader *respHeader = (UA_ResponseHeader*)response;
 
@@ -25637,7 +25627,7 @@ ZUTH_SecureChannel_sendBinaryMessage(UA_SecureChannel *channel, UA_UInt32 reques
 
     /* Encoding finished, send the final chunk */
     ci.final = UA_TRUE;
-    fprintf(stderr, "ZUTH_SecureChannel_sendBinaryMessage: Send the final chunk\n");
+//    fprintf(stderr, "ZUTH_SecureChannel_sendBinaryMessage: Send the final chunk\n");
     return ZUTH_SecureChannel_sendChunk(&ci, &message, messagePos);
 }
 
@@ -25687,8 +25677,6 @@ void ZUTH_receiveUAClientServiceResponse(UA_Client *client, const void *request,
 void
 __ZUTH_Client_Service(zhandle_t *zh, char *taskPath, UA_Client *client, const void *request, const UA_DataType *requestType,
                     void *response, const UA_DataType *responseType) {
-
-    fprintf(stderr, "__ZUTH_Client_Service(): Function called\n");
 
     UA_init(response, responseType);
     UA_ResponseHeader *respHeader = (UA_ResponseHeader*)response;
