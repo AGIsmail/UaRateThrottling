@@ -8,6 +8,7 @@
 #include <zk_cli.h>
 #include <zk_global.h>
 #include <zuthClientSend.h>
+#include <pthread.h>
 /**
  * ZooKeeper libraries
  */
@@ -40,16 +41,53 @@ zhandle_t *zkHandle; /* Global variable */
 static int to_send = 0;
 static int sent = 0;
 static int recvd = 0;
+UA_Client *client;
+char *taskPath;
+
+/* Running threads counter is from
+ * https://stackoverflow.com/questions/6154539/how-can-i-wait-for-any-all-pthreads-to-complete */
+volatile int running_threads = 0;
+pthread_mutex_t running_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void readDateTime(void * nullValue) {
+
+    UA_ReadValueId item;
+    UA_ReadValueId_init(&item);
+    item.nodeId = UA_NODEID_NUMERIC(0,
+            UA_NS0ID_SERVER_SERVERSTATUS_CURRENTTIME);
+    item.attributeId = UA_ATTRIBUTEID_VALUE;
+    int n = 0;
+    UA_ReadRequest request;
+    UA_ReadRequest_init(&request);
+    request.nodesToRead = &item;
+    request.nodesToReadSize = 1;
+    UA_ReadResponse response;
+    while (n < 10) {
+        fprintf(stderr, "init_UA_Client: calling ZUTH_Client_Service_read\n");
+        /* Call the read function once */
+        response = ZUTH_Client_Service_read(zh, taskPath, client, request);
+        UA_DateTime raw_date = *(UA_DateTime*) response.results->value.data;
+        UA_String string_date = UA_DateTime_toString(raw_date);
+        fprintf(stderr, "init_UA_Client: string date is %.*s\n",
+                (int) string_date.length, string_date.data);
+        UA_String_deleteMembers(&string_date);
+
+        n++;
+    }
+    pthread_mutex_lock(&running_mutex);
+    running_threads--;
+    pthread_mutex_unlock(&running_mutex);
+}
 /**
  * init_UA_client:
  *
  */
-static void init_UA_client(void* retval, zkUA_Config *zkUAConfigs) {
+static void init_UA_client(zkUA_Config *zkUAConfigs) {
 
-    UA_StatusCode *statuscode = (UA_StatusCode *) retval;
+    UA_StatusCode retval;
 
     /* Initialize new client handle */
-    UA_Client *client;
+
     client = UA_Client_new(UA_ClientConfig_standard);
     /* Create server destination string */
     char *serverDst = calloc(65535, sizeof(char));
@@ -60,7 +98,7 @@ static void init_UA_client(void* retval, zkUA_Config *zkUAConfigs) {
     /* Listing endpoints */
     UA_EndpointDescription* endpointArray = NULL;
     size_t endpointArraySize = 0;
-    statuscode = UA_Client_getEndpoints(client, serverDst, &endpointArraySize,
+    retval = UA_Client_getEndpoints(client, serverDst, &endpointArraySize,
             &endpointArray);
     if (retval != UA_STATUSCODE_GOOD) {
         UA_Array_delete(endpointArray, endpointArraySize,
@@ -101,33 +139,42 @@ static void init_UA_client(void* retval, zkUA_Config *zkUAConfigs) {
     zkUA_setGroupGuidPath(groupGuid);
     zkUA_setQueuePath();
     /* Encode the tasks path for the specific endpoint */
-    char *taskPath = zkUA_encodeServerQueuePath(*endpointUrlUAString);
+    taskPath = zkUA_encodeServerQueuePath(*endpointUrlUAString);
 
-    UA_ReadValueId item;
-    UA_ReadValueId_init(&item);
-    item.nodeId = UA_NODEID_NUMERIC(0,UA_NS0ID_SERVER_SERVERSTATUS_CURRENTTIME);
-    item.attributeId = UA_ATTRIBUTEID_VALUE;
-    int n=0;
-    UA_ReadRequest request;
-    UA_ReadRequest_init(&request);
-    request.nodesToRead = &item;
-    request.nodesToReadSize = 1;
-    UA_ReadResponse response;
-    while (n<100){
-    fprintf(stderr, "init_UA_Client: calling ZUTH_Client_Service_read\n");
-    response = ZUTH_Client_Service_read(zh, taskPath, client, request);
-
-//    if(response.responseHeader.serviceResult==UA_STATUSCODE_GOOD && UA_Variant_hasScalarType(&response.results->value, &UA_TYPES[UA_TYPES_DATETIME])){
-      UA_DateTime raw_date = *(UA_DateTime*) response.results->value.data;
-      UA_String string_date = UA_DateTime_toString(raw_date);
-      fprintf(stderr, "init_UA_Client: string date is %.*s\n", (int)string_date.length, string_date.data);
-      UA_String_deleteMembers(&string_date);
-//    } else printf("no response!\n");
-      n++;
+    /* create 100 threads to read the date and time 100 times concurrently
+     * NOTE: asynchronous calls are not yet supported in open62541.
+     * You should use GNU parallel instead to test server loading*/
+    pthread_t pth[100];
+    pthread_attr_t att[100];
+    for (int n = 0; n < 1; n++) { /* No async calls = only 1 thread at a time */
+        if (pthread_attr_init(&att[n]) != 0) {
+            break;
+        }
+        if (pthread_attr_setscope(&att[n], PTHREAD_SCOPE_SYSTEM) != 0) {
+            break;
+        }
+        if (pthread_attr_setdetachstate(&att[n], PTHREAD_CREATE_DETACHED)
+                != 0) {
+            break;
+        }
+        pthread_mutex_lock(&running_mutex);
+        running_threads++;
+        pthread_mutex_unlock(&running_mutex);
+        if (pthread_create(&pth[n], &att[n], readDateTime, (void *) NULL)
+                != 0) {
+            fprintf(stderr,
+                    "init_UA_Client: Could not initialize a thread to read the date and time from the UA Server\n");
+            pthread_mutex_lock(&running_mutex);
+            running_threads--;
+            pthread_mutex_unlock(&running_mutex);
+            break;
+        }
     }
-    //UA_ReadRequest_delete(&request);
-    //UA_ReadResponse_delete(&response);
 
+    /* wait for all threads to return */
+    while (running_threads > 0) {
+        sleep(1);
+    }
     /* Disconnect and exit */
     UA_Client_disconnect(client);
     free(groupGuid);
@@ -156,9 +203,7 @@ int main() {
         return errno;
     }
     zkHandle = zh; /* set global variable */
-
-    UA_StatusCode *retval;
-    init_UA_client((void *) retval, &zkUAConfigs);
+    init_UA_client(&zkUAConfigs);
     if (to_send != 0)
         fprintf(stderr, "Recvd %d responses for %d requests sent\n", recvd,
                 sent);

@@ -93,11 +93,6 @@ void zuth_executeRequest(char *stringRequest){
 
     int rc = 0;
 
-    /* Check that this task is not already in the local queue */
-    /* If it is already in the queues hashtable, return */
-    /* If it is not in the queues hashtable add it and process the task */
-
-
     /* Get the task's data */
     int buffer_len = 65535;
     char *buffer = calloc(buffer_len, sizeof(char));
@@ -198,6 +193,23 @@ static void zkUA_queueWatcher(zhandle_t *zzh, int type, int state,
                     "zkUA_queueWatcher: A node was created or deleted under %s\n",
                     termPath);
             struct String_vector strings;
+            /* Only get the queue and start processing the new tasks if the
+             * serviceLevel is Good. Otherwise, wait till it is good.
+             */
+            UA_NodeId nodeId = UA_NODEID_NUMERIC(0, UA_NS0ID_SERVER_SERVICELEVEL);
+            UA_Variant *outValue = UA_Variant_new();
+            UA_Int32 value = 0;
+            UA_Variant_setScalarCopy(outValue, &value, &UA_TYPES[UA_TYPES_INT32]);
+            while(value < 200 /* 200-255 is healthy. See OPC UA Part 4*/){
+                UA_StatusCode retval;
+                retval = UA_Server_readValue(server, nodeId, outValue);
+//                if(retval == UA_STATUSCODE_GOOD && UA_Variant_isScalar(outValue) && outValue->type == &UA_TYPES[UA_TYPES_INT32]){
+                    value = *(UA_Int32 *)outValue->data;
+                    printf("zkUA_queueWatcher: serviceLevel is: %i\n", value);
+//                }
+            }
+            UA_Variant_delete(outValue);
+            /* ServiceLevel is healthy, process queue */
             zoo_aget_children(zh, serverQueuePath, 1 /*watch*/, zuth_processTasks, strdup(serverQueuePath));
         }
         free(termPath);
@@ -277,7 +289,7 @@ static void init_ZUTH_Server(void *retval, zkUA_Config *zkUAConfigs) {
     free(activePath);
     free(serverActivePath);
     /* Initialize the hashmap that holds the newest task's ID for each session ID*/
-    zkUA_initializeTaskHashmap(); // Why?
+    zkUA_initializeTaskHashmap(); // ONLY in case you want to do complex multi-threaded processing of tasks
     /* Get the tasks and set a watch */
     UA_String endpointURL = UA_String_fromChars(serverUri);
     serverQueuePath= zkUA_setServerQueuePath(endpointURL);
@@ -295,36 +307,6 @@ static void init_ZUTH_Server(void *retval, zkUA_Config *zkUAConfigs) {
     server = UA_Server_new(config);
     /* More initializations */
     zkUA_initializeUaServerGlobal((void *) server);
-
-    /*    switch (zkUAConfigs->rSupport) {
-     case (2):  Warm Redundancy
-     case (3): {  Hot redundancy
-     Replicate or initialize addressSpace
-     zoo_aget_children(zh, zkUA_zkServAddSpacePath(), 0,
-     zkUA_checkAddressSpaceExists, &zkUAConfigs->guid);
-     if (!zkUAConfigs->state) {  inactive server - await activation signal from the failover controller
-     write server status as suspended
-     zkUA_writeServerStatus(3);
-     }
-     break;
-     }
-     case (0):  Standalone server
-     case (1):  Cold redundancy
-     case (4):  Transparent Redundancy
-     case (5): {  Hot+ Redundancy
-     if (zkUAConfigs->state) {  active server
-     zoo_aget_children(zh, zkUA_zkServAddSpacePath(), 0,
-     zkUA_checkAddressSpaceExists, &zkUAConfigs->guid);
-     create thread to monitor changes to address space and apply them locally
-     } else {  inactive server - error
-     fprintf(stderr,
-     "init_UA_server: Error! Initialized as an inactive server. Exiting...\n");
-     pthread_exit(&statuscode);  race?
-     }
-     break;
-     }
-     }
-     */
     /* start server */
     statuscode = UA_Server_run(server, &running); //UA_blocks until running=false
     fprintf(stderr, "init_ZUTH_Server: Exiting after server run\n");
