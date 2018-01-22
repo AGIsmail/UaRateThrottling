@@ -60,7 +60,7 @@ char *taskPath;
 volatile int running_threads = 0;
 pthread_mutex_t running_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-static void readDateTime(void * nullValue) {
+static void *readDateTime(void * nullValue) {
 
     UA_ReadValueId item;
     UA_ReadValueId_init(&item);
@@ -88,6 +88,7 @@ static void readDateTime(void * nullValue) {
     pthread_mutex_lock(&running_mutex);
     running_threads--;
     pthread_mutex_unlock(&running_mutex);
+    return NULL;
 }
 /**
  * init_UA_client:

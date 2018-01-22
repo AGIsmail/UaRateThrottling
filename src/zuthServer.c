@@ -127,12 +127,12 @@ void zuth_executeRequest(char *stringRequest){
         return;
     }
     /* Convert the ByteArray from a JSON object to a string */
-    char *conv = json_string_value(jString);
+    const char *conv = json_string_value(jString);
     /* Convert the ByteArray from a base64 encoded string into UA_ByteArray (unsigned char) */
     UA_ByteString *dst = UA_ByteString_new();
     UA_ByteString_init(dst);
     dst->length = offset;
-    dst->data = g_base64_decode((const char *) conv, &dst->length);
+    dst->data = g_base64_decode(conv, &dst->length);
     /* Decode the channelId */
     json_t *jChannel = json_object_get(jsonRoot, "channelId");
     /* Get the secureChannel of the client from the channelId */
@@ -318,7 +318,7 @@ static void init_ZUTH_Server(void *retval, zkUA_Config *zkUAConfigs) {
     /* More initializations */
     zkUA_initializeUaServerGlobal((void *) server);
     /* start server */
-    statuscode = UA_Server_run(server, &running); //UA_blocks until running=false
+    *statuscode = UA_Server_run(server, &running); //UA_blocks until running=false
     fprintf(stderr, "init_ZUTH_Server: Exiting after server run\n");
     /* ctrl-c received -> clean up */
     UA_Server_delete(server);
