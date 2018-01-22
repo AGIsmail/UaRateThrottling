@@ -1,5 +1,23 @@
+/*******************************************************************************
+ * Copyright (C) 2018 Ahmed Ismail <aismail [at] protonmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ ******************************************************************************/
+
 /**
- * Licensed to the Apache Software Foundation (ASF) under one
+ * Parts of this file are from Zookeeper's cli.c sample program
+ * and are licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
@@ -16,13 +34,6 @@
  * limitations under the License.
  */
 
-/**
- * cli.c is a example/sample C client shell for ZooKeeper. It contains
- * basic shell functionality which exercises some of the features of
- * the ZooKeeper C client API. It is not a full fledged client and is
- * not meant for production usage - see the Java client shell for a
- * fully featured shell.
- */
 
 #include <zookeeper.h>
 #include <proto.h>
