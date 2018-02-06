@@ -19,4 +19,18 @@ Compile:
 ```sh
 ACLOCAL="aclocal -I /usr/share/aclocal" autoreconf -if
 ./configure && make
+```
 
+### Running a Client & Server
+
+The ZooKeeper server/quorum should already be running.
+
+Configure the zkUA configuration file (clientConf.txt and or serverConf.txt) and execute:
+```sh
+./zuthServer
+./zuthClient
+```
+
+### Limitations
+
+At the time of this writing, the base library for OPC UA (Open62541) does not support asynchronous calls.
