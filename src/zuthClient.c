@@ -73,7 +73,7 @@ static void *readDateTime(void * nullValue) {
     request.nodesToRead = &item;
     request.nodesToReadSize = 1;
     UA_ReadResponse response;
-    while (n < 10) {
+    while (n < 1) {
         fprintf(stderr, "init_UA_Client: calling ZUTH_Client_Service_read\n");
         /* Call the read function once */
         response = ZUTH_Client_Service_read(zh, taskPath, client, request);
@@ -84,7 +84,10 @@ static void *readDateTime(void * nullValue) {
         UA_String_deleteMembers(&string_date);
 
         n++;
+        UA_ReadResponse_deleteMembers(&response);
     }
+
+
     pthread_mutex_lock(&running_mutex);
     running_threads--;
     pthread_mutex_unlock(&running_mutex);
@@ -189,6 +192,7 @@ static void init_UA_client(zkUA_Config *zkUAConfigs) {
     }
     /* Disconnect and exit */
     UA_Client_disconnect(client);
+    free(taskPath);
     free(groupGuid);
     free(serverDst);
     free_zkUAConfigs(zkUAConfigs);

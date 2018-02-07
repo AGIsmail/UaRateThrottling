@@ -25530,6 +25530,7 @@ ZUTH_SecureChannel_sendChunk(UA_ChunkInfo *ci, UA_ByteString *dst, size_t offset
     /* Encode the request message itself */
     char * encodedString = g_base64_encode(dst->data, dst->length);
     json_t *jsonDst = json_string(encodedString);
+    free(dst->data);
 
     /* Put the json objects in a single document */
     json_t *jsonRequest = json_object();
@@ -25549,6 +25550,7 @@ ZUTH_SecureChannel_sendChunk(UA_ChunkInfo *ci, UA_ByteString *dst, size_t offset
     } else {
         fprintf(stderr, "ZUTH_SecureChannel_sendChunk: Created a task with the path %s \n %s\n", path_buffer, s);
     }
+    json_decref(jsonRequest);
     free(s);
     free(path_buffer);
     g_free(encodedString);
@@ -25617,7 +25619,7 @@ ZUTH_SecureChannel_sendBinaryMessage(UA_SecureChannel *channel, UA_UInt32 reques
     /* Encoding failed, release the message */
     if(retval != UA_STATUSCODE_GOOD) {
         if(!ci.final) {
-            /* the abort message was not send */
+            /* the abort message was not sent */
             fprintf(stderr, "ZUTH_SecureChannel_sendBinaryMessage, abort message was not sent\n");
             ci.errorCode = retval;
             ZUTH_SecureChannel_sendChunk(&ci, &message, messagePos);
@@ -25692,18 +25694,16 @@ __ZUTH_Client_Service(zhandle_t *zh, char *taskPath, UA_Client *client, const vo
 //    UA_LOG_DEBUG_CHANNEL(client->config.logger, client->connection.channel, "Session " UA_PRINTF_GUID_FORMAT " created",
 //                         UA_PRINTF_GUID_DATA(client->connection.channel->sessions.lh_first->session->sessionId.identifier.guid));
 //    fprintf(stderr, "Session " UA_PRINTF_GUID_FORMAT " created\n",  UA_PRINTF_GUID_DATA(client->connection.channel->sessions.lh_first->session->sessionId.identifier.guid));
+
     /* Adjusting the request header. The const attribute is violated, but we
      * only touch the following members: */
-
     UA_RequestHeader *rr = (UA_RequestHeader*)(uintptr_t)request;
     rr->authenticationToken = UA_getClientAuthToken(client); /* cleaned up at the end */
-
     rr->timestamp = UA_DateTime_now();
-
     rr->requestHandle = ++client->requestHandle;
 
      /* Send the request */
-    UA_UInt32 requestId = ++client->requestId;
+     UA_UInt32 requestId = ++client->requestId;
      retval = ZUTH_SecureChannel_sendBinaryMessage(&client->channel, requestId, rr, requestType, taskPath, zh);
      if(retval != UA_STATUSCODE_GOOD) {
          if(retval == UA_STATUSCODE_BADENCODINGLIMITSEXCEEDED)
