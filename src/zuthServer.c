@@ -150,6 +150,9 @@ void zuth_executeRequest(char *stringRequest){
         fprintf(stderr,"zoo_delete of task failed: %s", stringRequest);
         zkUA_error2String(rc);
     }
+    free(buffer);
+    UA_ByteString_delete(dst);
+    json_decref(jsonRoot);
 }
 
 void zuth_processTasks(int rc, const struct String_vector *strings, const void *data){
@@ -215,7 +218,7 @@ static void zkUA_queueWatcher(zhandle_t *zzh, int type, int state,
                 retval = UA_Server_readValue(server, nodeId, outValue);
 //                if(retval == UA_STATUSCODE_GOOD && UA_Variant_isScalar(outValue) && outValue->type == &UA_TYPES[UA_TYPES_INT32]){
                     value = *(UA_Int32 *)outValue->data;
-                    printf("zkUA_queueWatcher: serviceLevel is: %i\n", value);
+                    printf("zkUA_queueWatcher: serviceLevel is: %d\n", value);
 //                }
             }
             UA_Variant_delete(outValue);
@@ -324,7 +327,10 @@ static void init_ZUTH_Server(void *retval, zkUA_Config *zkUAConfigs) {
     UA_Server_delete(server);
     nl.deleteMembers(&nl);
     zkUA_destroyTaskHashtable();
+    free(endpointURL.data);
+    free(encodedServerUri);
     free(groupGuid);
+    free(serverQueuePath);
     free(serverUri);
     free(serverTaskPath);
     free(path_buffer);
