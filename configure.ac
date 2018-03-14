@@ -5,7 +5,7 @@ AC_PREREQ([2.69])
 AC_INIT([zkUAThrottle], [0.1], [aismail@auto.tuwien.ac.at])
 AM_INIT_AUTOMAKE(zkUAThrottle,0.1)
 AC_OUTPUT(Makefile)
-AC_CONFIG_SRCDIR([src/zuthServer.c])
+AC_CONFIG_SRCDIR([src/zk_cli.c])
 AC_CONFIG_HEADERS([config.h])
 AM_INIT_AUTOMAKE([foreign])
 

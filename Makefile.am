@@ -22,11 +22,11 @@ libzuth_la_LIBADD = -lzookeeper_mt
 libzuth_la_LDFLAGS = $(LIB_LDFLAGS) -export-symbols-regex $(EXPORT_SYMBOLS) $(INCLUDES)
 
 bin_PROGRAMS = zuthClient zuthServer
-zuthClient_SOURCES = src/zuthClient.c # $(ZUTH_SRC)
+zuthClient_SOURCES = examples/zuthClient.c # $(ZUTH_SRC)
 zuthClient_LDADD = libzuth.la -lpthread -lzookeeper_mt -ljansson -lglib-2.0
 zuthClient_CFLAGS = -DTHREADED -DINTERCEPT $(INCLUDES)
 
-zuthServer_SOURCES = src/zuthServer.c #$(ZUTH_SRC)
+zuthServer_SOURCES = examples/zuthServer.c #$(ZUTH_SRC)
 zuthServer_LDADD = libzuth.la -lpthread -lzookeeper_mt -ljansson -lglib-2.0
 zuthServer_CFLAGS = -DTHREADED -DINTERCEPT $(INCLUDES)
 
